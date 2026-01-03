@@ -80,3 +80,59 @@ func TestProvisionAgentHomeCopy(t *testing.T) {
 		t.Errorf("expected scion-agent.json NOT to be copied to agent home when home/ directory exists")
 	}
 }
+
+func TestProvisionAgentLegacyTemplateCleanup(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Move to tmpDir to avoid being inside the project's git repo
+	oldWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldWd)
+
+	// Initialize dummy git repo
+	runCmd(t, tmpDir, "git", "init")
+	runCmd(t, tmpDir, "git", "config", "user.email", "test@example.com")
+	runCmd(t, tmpDir, "git", "config", "user.name", "Test User")
+	os.WriteFile(filepath.Join(tmpDir, "initial"), []byte("initial"), 0644)
+	runCmd(t, tmpDir, "git", "add", "initial")
+	runCmd(t, tmpDir, "git", "commit", "-m", "initial commit")
+
+	// Mock HOME
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+	os.Setenv("HOME", tmpDir)
+
+	projectScionDir := filepath.Join(tmpDir, ".scion")
+	
+	// Add .scion/agents/ to gitignore
+	os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte(".scion/agents/\n"), 0644)
+	runCmd(t, tmpDir, "git", "add", ".gitignore")
+	runCmd(t, tmpDir, "git", "commit", "-m", "add gitignore")
+
+	// Create a template WITHOUT a home directory (legacy style)
+	tplDir := filepath.Join(projectScionDir, "templates", "legacy-tpl")
+	os.MkdirAll(tplDir, 0755)
+	
+	// Create scion-agent.json in template root
+	os.WriteFile(filepath.Join(tplDir, "scion-agent.json"), []byte(`{"harness": "test"}`), 0644)
+	
+	// Create another file that SHOULD be copied
+	os.WriteFile(filepath.Join(tplDir, "bashrc"), []byte("echo hello"), 0644)
+
+	// Provision agent
+	agentName := "legacy-agent"
+	agentHome, _, _, err := ProvisionAgent(context.Background(), agentName, "legacy-tpl", "", projectScionDir, "", "")
+	if err != nil {
+		t.Fatalf("ProvisionAgent failed: %v", err)
+	}
+
+	// Verify bashrc exists
+	if _, err := os.Stat(filepath.Join(agentHome, "bashrc")); os.IsNotExist(err) {
+		t.Errorf("expected bashrc to be copied to agent home")
+	}
+
+	// Verify scion-agent.json should NOT exist in agentHome
+	if _, err := os.Stat(filepath.Join(agentHome, "scion-agent.json")); err == nil {
+		t.Errorf("scion-agent.json should NOT be present in agent home for legacy templates")
+	}
+}

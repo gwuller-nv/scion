@@ -130,6 +130,13 @@ func ProvisionAgent(ctx context.Context, agentName string, templateName string, 
 			if err := util.CopyDir(tpl.Path, agentHome); err != nil {
 				return "", "", nil, fmt.Errorf("failed to copy template %s: %w", tpl.Name, err)
 			}
+
+			// When falling back to copying the entire template directory, we inadvertently copy
+			// scion-agent.json which is a tool configuration file, not meant for the agent's home.
+			spuriousFile := filepath.Join(agentHome, "scion-agent.json")
+			if _, err := os.Stat(spuriousFile); err == nil {
+				_ = os.Remove(spuriousFile)
+			}
 		}
 
 		// Load scion-agent.json from this template and merge it
