@@ -62,6 +62,7 @@ type AuthConfig struct {
 	GoogleCloudProject   string
 	OAuthCreds           string
 	AnthropicAPIKey      string
+	SelectedType         string
 }
 
 type AuthProvider interface {

@@ -253,3 +253,51 @@ func TestGeminiProvision(t *testing.T) {
 		t.Error("expected .config/gcloud volume")
 	}
 }
+
+func TestGeminiSettingsUpdateOnStart(t *testing.T) {
+	// Setup temp agent structure
+	agentHome, err := os.MkdirTemp("", "agent-home-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(agentHome)
+
+	agentDir := filepath.Dir(agentHome)
+	
+	// 1. Create agent with defaults (no auth type in settings.json yet, or old one)
+	geminiDir := filepath.Join(agentHome, ".gemini")
+	os.MkdirAll(geminiDir, 0755)
+	initialSettings := `{"security":{"auth":{"selectedType":"gemini-api-key"}}}`
+	os.WriteFile(filepath.Join(geminiDir, "settings.json"), []byte(initialSettings), 0644)
+
+	// 2. Create scion-agent.json with NEW auth type
+	newConfig := `{
+		"gemini": {
+			"auth_selectedType": "oauth-personal"
+		}
+	}`
+	os.WriteFile(filepath.Join(agentDir, "scion-agent.json"), []byte(newConfig), 0644)
+
+	g := &GeminiCLI{}
+
+	// 3. Run DiscoverAuth - should pick up new type from scion-agent.json
+	auth := g.DiscoverAuth(agentHome)
+	if auth.SelectedType != "oauth-personal" {
+		t.Errorf("DiscoverAuth: expected selectedType oauth-personal, got %s", auth.SelectedType)
+	}
+
+	// 4. Run PropagateFiles - should update settings.json
+	if err := g.PropagateFiles(agentHome, "root", auth); err != nil {
+		t.Fatalf("PropagateFiles failed: %v", err)
+	}
+
+	// 5. Verify settings.json updated
+	settingsPath := filepath.Join(geminiDir, "settings.json")
+	agentSettings, err := config.LoadAgentSettings(settingsPath)
+	if err != nil {
+		t.Fatalf("failed to load settings: %v", err)
+	}
+	if agentSettings.Security.Auth.SelectedType != "oauth-personal" {
+		t.Errorf("PropagateFiles: expected updated settings to match oauth-personal, got %s", agentSettings.Security.Auth.SelectedType)
+	}
+}
