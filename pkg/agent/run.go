@@ -59,9 +59,9 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 	}
 
 	task := opts.Task
-	// If we are explicitly attaching, we allow starting without a task
+	// If we are explicitly attaching or resuming, we allow starting without a task
 	isAttaching := opts.Detached != nil && !*opts.Detached
-	if task == "" && promptFileContent == "" && !isAttaching {
+	if task == "" && promptFileContent == "" && !isAttaching && !opts.Resume {
 		return nil, fmt.Errorf("no task provided: prompt.md is empty and no task was given in options")
 	}
 
@@ -69,9 +69,9 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 		return nil, fmt.Errorf("task conflict: both prompt.md and start options provide a task")
 	}
 
-	if task == "" {
+	if task == "" && !opts.Resume {
 		task = promptFileContent
-	} else if promptFileContent == "" {
+	} else if promptFileContent == "" && task != "" {
 		_ = os.WriteFile(promptFile, []byte(task), 0644)
 	}
 

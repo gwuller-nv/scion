@@ -34,8 +34,13 @@ func (c *ClaudeCode) GetEnv(agentName string, agentHome string, unixUsername str
 
 func (c *ClaudeCode) GetCommand(task string, resume bool, baseArgs []string) []string {
 	args := []string{"claude", "--no-chrome", "--dangerously-skip-permissions"}
+	if resume {
+		args = append(args, "--continue")
+	}
 	args = append(args, baseArgs...)
-	args = append(args, task)
+	if !resume && task != "" {
+		args = append(args, task)
+	}
 	return args
 }
 

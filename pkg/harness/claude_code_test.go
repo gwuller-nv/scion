@@ -5,8 +5,41 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
+
+func TestClaudeCode_GetCommand(t *testing.T) {
+	c := &ClaudeCode{}
+
+	// 1. Normal task
+	cmd := c.GetCommand("do something", false, nil)
+	expected := []string{"claude", "--no-chrome", "--dangerously-skip-permissions", "do something"}
+	if !reflect.DeepEqual(cmd, expected) {
+		t.Errorf("expected %v, got %v", expected, cmd)
+	}
+
+	// 2. Empty task
+	cmd = c.GetCommand("", false, nil)
+	expected = []string{"claude", "--no-chrome", "--dangerously-skip-permissions"}
+	if !reflect.DeepEqual(cmd, expected) {
+		t.Errorf("expected %v, got %v", expected, cmd)
+	}
+
+	// 3. Resume
+	cmd = c.GetCommand("do something", true, nil)
+	expected = []string{"claude", "--no-chrome", "--dangerously-skip-permissions", "--continue"}
+	if !reflect.DeepEqual(cmd, expected) {
+		t.Errorf("expected %v, got %v", expected, cmd)
+	}
+
+	// 4. Task with baseArgs
+	cmd = c.GetCommand("do something", false, []string{"--foo", "bar"})
+	expected = []string{"claude", "--no-chrome", "--dangerously-skip-permissions", "--foo", "bar", "do something"}
+	if !reflect.DeepEqual(cmd, expected) {
+		t.Errorf("expected %v, got %v", expected, cmd)
+	}
+}
 
 func TestClaudeCode_Provision(t *testing.T) {
 	tmpDir := t.TempDir()

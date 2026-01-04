@@ -6,15 +6,12 @@ import (
 
 // resumeCmd represents the resume command
 var resumeCmd = &cobra.Command{
-	Use:   "resume <agent-name> [task...]",
+	Use:   "resume <agent-name>",
 	Short: "Resume a stopped scion agent",
 	Long: `Resume an existing stopped LLM agent. 
-The agent will be re-launched with the --resume flag, preserving its previous state.
-
-The agent-name is required as the first argument. If subsequent arguments 
-form a task prompt, they will be used. If no task arguments are provided, 
-the agent will look for a prompt.md file in its root directory.`,
-	Args: cobra.MinimumNArgs(1),
+The agent will be re-launched with the harness-specific resume flag, 
+preserving its previous state.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RunAgent(cmd, args, true)
 	},
