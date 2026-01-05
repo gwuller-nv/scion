@@ -156,6 +156,9 @@ func ProvisionAgent(ctx context.Context, agentName string, templateName string, 
 			if hConfig.Env != nil {
 				settingsCfg.Env = hConfig.Env
 			}
+			if hConfig.Volumes != nil {
+				settingsCfg.Volumes = hConfig.Volumes
+			}
 			if hConfig.AuthSelectedType != "" {
 				settingsCfg.Gemini = &api.GeminiConfig{
 					AuthSelectedType: hConfig.AuthSelectedType,

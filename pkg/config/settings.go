@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/ptone/scion-agent/pkg/api"
 )
 
 type RuntimeConfig struct {
@@ -18,6 +20,7 @@ type HarnessConfig struct {
 	Image            string            `json:"image"`
 	User             string            `json:"user"`
 	Env              map[string]string `json:"env,omitempty"`
+	Volumes          []api.VolumeMount `json:"volumes,omitempty"`
 	AuthSelectedType string            `json:"auth_selectedType,omitempty"`
 }
 
@@ -25,6 +28,7 @@ type HarnessOverride struct {
 	Image            string            `json:"image,omitempty"`
 	User             string            `json:"user,omitempty"`
 	Env              map[string]string `json:"env,omitempty"`
+	Volumes          []api.VolumeMount `json:"volumes,omitempty"`
 	AuthSelectedType string            `json:"auth_selectedType,omitempty"`
 }
 
@@ -94,6 +98,9 @@ func (s *Settings) ResolveHarness(profileName, harnessName string) (HarnessConfi
 			}
 			if override.Env != nil {
 				result.Env = mergeMaps(result.Env, override.Env)
+			}
+			if override.Volumes != nil {
+				result.Volumes = append(result.Volumes, override.Volumes...)
 			}
 		}
 	}
@@ -221,6 +228,9 @@ func MergeSettings(base *Settings, data []byte) error {
 			if v.Env != nil {
 				existing.Env = mergeMaps(existing.Env, v.Env)
 			}
+			if v.Volumes != nil {
+				existing.Volumes = append(existing.Volumes, v.Volumes...)
+			}
 			base.Harnesses[k] = existing
 		}
 	}
@@ -256,6 +266,9 @@ func MergeSettings(base *Settings, data []byte) error {
 					}
 					if hv.Env != nil {
 						hov.Env = mergeMaps(hov.Env, hv.Env)
+					}
+					if hv.Volumes != nil {
+						hov.Volumes = append(hov.Volumes, hv.Volumes...)
 					}
 					existing.HarnessOverrides[hk] = hov
 				}
