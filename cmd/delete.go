@@ -61,6 +61,6 @@ var removeBranch bool
 
 func init() {
 	rootCmd.AddCommand(deleteCmd)
-	deleteCmd.Flags().BoolVar(&removeBranch, "remove-branch", false, "Remove the git branch associated with the worktree")
+	deleteCmd.Flags().BoolVarP(&removeBranch, "remove-branch", "b", false, "Remove the git branch associated with the worktree")
 }
 
