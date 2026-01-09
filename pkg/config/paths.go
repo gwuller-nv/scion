@@ -29,6 +29,29 @@ func GetRepoDir() (string, bool) {
 	return "", false
 }
 
+// FindProjectRoot walks up the directory tree to find the .scion directory.
+func FindProjectRoot() (string, bool) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", false
+	}
+
+	dir := wd
+	for {
+		p := filepath.Join(dir, DotScion)
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
+			return p, true
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir { // Reached root
+			break
+		}
+		dir = parent
+	}
+	return "", false
+}
+
 // GetResolvedProjectDir returns the active .scion directory based on precedence.
 func GetResolvedProjectDir(explicitPath string) (string, error) {
 	// 1. Explicitly provided via flag
@@ -43,28 +66,18 @@ func GetResolvedProjectDir(explicitPath string) (string, error) {
 		return abs, nil
 	}
 
-	// 2. Check if we are in a repo with a .scion dir at the root
-	if p, ok := GetRepoDir(); ok {
+	// 2. Walk up to find .scion (covers repo root and current dir cases)
+	if p, ok := FindProjectRoot(); ok {
 		return p, nil
 	}
 
-	// 3. Current directory
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	projectPath := filepath.Join(wd, DotScion)
-	if info, err := os.Stat(projectPath); err == nil && info.IsDir() {
-		return projectPath, nil
-	}
-
-	// 4. Fallback to global
+	// 3. Fallback to global
 	return GetGlobalDir()
 }
 
 func GetProjectDir() (string, error) {
-	// 1. Check if we are in a repo with a .scion dir at the root
-	if p, ok := GetRepoDir(); ok {
+	// 1. Walk up to find .scion
+	if p, ok := FindProjectRoot(); ok {
 		return p, nil
 	}
 

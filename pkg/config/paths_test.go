@@ -121,3 +121,46 @@ func TestGetResolvedProjectDir(t *testing.T) {
 		}
 	}
 }
+
+func TestGetResolvedProjectDir_WalkUp(t *testing.T) {
+	// Create structure:
+	// /tmp/grove/.scion
+	// /tmp/grove/subdir/deep
+	
+	tmpGrove := t.TempDir()
+	scionDir := filepath.Join(tmpGrove, ".scion")
+	if err := os.Mkdir(scionDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	
+	subDir := filepath.Join(tmpGrove, "subdir", "deep")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	
+	origWd, _ := os.Getwd()
+	defer os.Chdir(origWd)
+	
+	// Set HOME to a clean temp dir so we don't fall back to real global .scion
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	if err := os.Chdir(subDir); err != nil {
+		t.Fatal(err)
+	}
+	
+	// Expect to find the .scion dir in the parent
+	got, err := GetResolvedProjectDir("")
+	if err != nil {
+		t.Fatalf("GetResolvedProjectDir failed: %v", err)
+	}
+	
+	evalGot, _ := filepath.EvalSymlinks(got)
+	evalScion, _ := filepath.EvalSymlinks(scionDir)
+	
+	if evalGot != evalScion {
+		t.Errorf("Expected %q, got %q", evalScion, evalGot)
+	}
+}
