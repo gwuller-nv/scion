@@ -75,3 +75,27 @@ A harness for the OpenAI Codex CLI.
 ### Known Limitations
 - **Auth File Copy**: The `auth.json` file is only copied when the agent is **created**.
 - **Model selection**: Specific model selection must currently be handled via the `config.toml` or environment variables within the agent.
+
+---
+
+## Feature Capability Matrix
+
+The following table summarizes the capabilities supported by each agent harness within Scion.
+
+| Capability | Gemini | Claude | OpenCode | Codex |
+| :--- | :---: | :---: | :---: | :---: |
+| **Resume** | ✅ | ✅ | ✅ | ✅ |
+| With Prompt | ✅ | ✅ | ✅ | ❌ |
+| Custom Session ID | ❌ | ✅ | ❌ | ❌ |
+| **Interject** | ✅ | ✅ | ✅ | ✅ |
+| Interupt Key | C-c | C-c | Esc / C-c | C-c |
+| **Enqueue** | ✅ | ✅ | ✅ | ✅ |
+| **Hooks** | ✅ | ✅ | ❌ | ❌ |
+| Support | ✅ | ✅ | ❌ | ❌ |
+| **OpenTelemetry** | ✅ | ✅  | ❌ | ✅  |
+
+* **Resume with Prompt**: Ability to provide a new task/prompt when resuming an existing session.
+* **Interject** (pending feature): Key used to interrupt the agent (e.g., stop generation).
+* **Enqueue** (pending feature): Ability to send messages to the agent while it's running (requires Tmux).
+* **Hooks**: Support for lifecycle hooks (e.g., `SessionStart`, `AfterTool`).
+* **OpenTelemetry** (pending feature): Specific events vary
