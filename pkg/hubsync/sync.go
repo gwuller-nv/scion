@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ptone/scion-agent/pkg/config"
+	"github.com/ptone/scion-agent/pkg/credentials"
 	"github.com/ptone/scion-agent/pkg/hubclient"
 	"github.com/ptone/scion-agent/pkg/util"
 )
@@ -587,16 +588,27 @@ func createHubClient(settings *config.Settings, endpoint string) (hubclient.Clie
 	var opts []hubclient.Option
 
 	// Add authentication - check in priority order
+	authConfigured := false
 	if settings.Hub != nil {
 		if settings.Hub.Token != "" {
 			opts = append(opts, hubclient.WithBearerToken(settings.Hub.Token))
+			authConfigured = true
 		} else if settings.Hub.APIKey != "" {
 			opts = append(opts, hubclient.WithAPIKey(settings.Hub.APIKey))
-		} else {
-			// Fallback to auto dev auth
-			opts = append(opts, hubclient.WithAutoDevAuth())
+			authConfigured = true
 		}
-	} else {
+	}
+
+	// Check for OAuth credentials from scion hub auth login
+	if !authConfigured {
+		if accessToken := credentials.GetAccessToken(endpoint); accessToken != "" {
+			opts = append(opts, hubclient.WithBearerToken(accessToken))
+			authConfigured = true
+		}
+	}
+
+	// Fallback to auto dev auth
+	if !authConfigured {
 		opts = append(opts, hubclient.WithAutoDevAuth())
 	}
 
