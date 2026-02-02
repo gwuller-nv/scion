@@ -57,6 +57,7 @@ func (s *SQLiteStore) Migrate(ctx context.Context) error {
 		migrationV6,
 		migrationV7,
 		migrationV8,
+		migrationV9,
 	}
 
 	// Create migrations table if not exists
@@ -398,6 +399,33 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(prefix);
 const migrationV8 = `
 -- Add message column to agents table
 ALTER TABLE agents ADD COLUMN message TEXT;
+`
+
+// Migration V9: Host secrets and join tokens for Runtime Host authentication
+const migrationV9 = `
+-- Host secrets table for HMAC-based authentication
+CREATE TABLE IF NOT EXISTS host_secrets (
+    host_id TEXT PRIMARY KEY,
+    secret_key BLOB NOT NULL,
+    algorithm TEXT NOT NULL DEFAULT 'hmac-sha256',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    rotated_at TIMESTAMP,
+    expires_at TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'active',
+    FOREIGN KEY (host_id) REFERENCES runtime_hosts(id) ON DELETE CASCADE
+);
+
+-- Host join tokens table for registration bootstrap
+CREATE TABLE IF NOT EXISTS host_join_tokens (
+    host_id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by TEXT NOT NULL,
+    FOREIGN KEY (host_id) REFERENCES runtime_hosts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_host_join_tokens_hash ON host_join_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_host_join_tokens_expires ON host_join_tokens(expires_at);
 `
 
 // Helper functions for JSON marshaling/unmarshaling

@@ -268,6 +268,8 @@ func isUnauthenticatedEndpoint(path string) bool {
 		return true
 	case "/api/v1/auth/cli/token": // CLI OAuth token exchange
 		return true
+	case "/api/v1/hosts/join": // Host registration bootstrap (uses join token)
+		return true
 	}
 	return false
 }

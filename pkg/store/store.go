@@ -57,6 +57,9 @@ type Store interface {
 
 	// API Key operations
 	APIKeyStore
+
+	// Host Secret operations (Runtime Host authentication)
+	HostSecretStore
 }
 
 // AgentStore defines agent-related persistence operations.
@@ -500,4 +503,46 @@ type APIKeyStore interface {
 
 	// RevokeUserAPIKeys revokes all API keys for a user.
 	RevokeUserAPIKeys(ctx context.Context, userID string) error
+}
+
+// =============================================================================
+// Host Secrets (Runtime Host Authentication)
+// =============================================================================
+
+// HostSecretStore defines host secret persistence operations.
+type HostSecretStore interface {
+	// CreateHostSecret creates a new host secret record.
+	// Returns ErrAlreadyExists if a secret for this host already exists.
+	CreateHostSecret(ctx context.Context, secret *HostSecret) error
+
+	// GetHostSecret retrieves a host secret by host ID.
+	// Returns ErrNotFound if the secret doesn't exist.
+	GetHostSecret(ctx context.Context, hostID string) (*HostSecret, error)
+
+	// UpdateHostSecret updates an existing host secret.
+	// Returns ErrNotFound if the secret doesn't exist.
+	UpdateHostSecret(ctx context.Context, secret *HostSecret) error
+
+	// DeleteHostSecret removes a host secret.
+	// Returns ErrNotFound if the secret doesn't exist.
+	DeleteHostSecret(ctx context.Context, hostID string) error
+
+	// CreateJoinToken creates a new join token for host registration.
+	// Returns ErrAlreadyExists if a token for this host already exists.
+	CreateJoinToken(ctx context.Context, token *HostJoinToken) error
+
+	// GetJoinToken retrieves a join token by token hash.
+	// Returns ErrNotFound if the token doesn't exist.
+	GetJoinToken(ctx context.Context, tokenHash string) (*HostJoinToken, error)
+
+	// GetJoinTokenByHostID retrieves a join token by host ID.
+	// Returns ErrNotFound if the token doesn't exist.
+	GetJoinTokenByHostID(ctx context.Context, hostID string) (*HostJoinToken, error)
+
+	// DeleteJoinToken removes a join token by host ID.
+	// Returns ErrNotFound if the token doesn't exist.
+	DeleteJoinToken(ctx context.Context, hostID string) error
+
+	// CleanExpiredJoinTokens removes all expired join tokens.
+	CleanExpiredJoinTokens(ctx context.Context) error
 }

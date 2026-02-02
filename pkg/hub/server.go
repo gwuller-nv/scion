@@ -50,6 +50,10 @@ type ServerConfig struct {
 	// AuthorizedDomains is a list of email domains allowed to authenticate.
 	// If empty, all domains are allowed.
 	AuthorizedDomains []string
+	// HostAuthConfig holds configuration for Runtime Host HMAC authentication.
+	HostAuthConfig HostAuthConfig
+	// HubEndpoint is the public endpoint URL for this Hub (used in host join responses).
+	HubEndpoint string
 }
 
 // DefaultServerConfig returns the default server configuration.
@@ -62,8 +66,15 @@ func DefaultServerConfig() ServerConfig {
 		CORSEnabled:  true,
 		CORSAllowedOrigins: []string{"*"},
 		CORSAllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		CORSAllowedHeaders: []string{"Authorization", "Content-Type", "X-Scion-Host-Token", "X-Scion-Agent-Token", "X-API-Key"},
-		CORSMaxAge:         3600,
+		CORSAllowedHeaders: []string{
+			"Authorization", "Content-Type",
+			"X-Scion-Host-Token", "X-Scion-Agent-Token", "X-API-Key",
+			// Host HMAC authentication headers
+			"X-Scion-Host-ID", "X-Scion-Timestamp", "X-Scion-Nonce",
+			"X-Scion-Signature", "X-Scion-Signed-Headers",
+		},
+		CORSMaxAge:       3600,
+		HostAuthConfig:   DefaultHostAuthConfig(),
 	}
 }
 
@@ -177,6 +188,7 @@ type Server struct {
 	apiKeyService     *APIKeyService      // API key service
 	oauthService      *OAuthService       // OAuth service for CLI authentication
 	authConfig        AuthConfig          // Unified auth configuration
+	hostAuthService   *HostAuthService    // Host HMAC authentication service
 }
 
 // New creates a new Hub API server.
@@ -227,6 +239,12 @@ func New(cfg ServerConfig, s store.Store) *Server {
 	// Log authorized domains if configured
 	if len(cfg.AuthorizedDomains) > 0 {
 		log.Printf("[Hub] Authorized domains: %s", strings.Join(cfg.AuthorizedDomains, ", "))
+	}
+
+	// Initialize host auth service if enabled
+	if cfg.HostAuthConfig.Enabled {
+		srv.hostAuthService = NewHostAuthService(cfg.HostAuthConfig, s)
+		log.Printf("[Hub] Host HMAC authentication enabled")
 	}
 
 	// Build unified auth configuration
@@ -293,6 +311,13 @@ func (s *Server) GetAPIKeyService() *APIKeyService {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.apiKeyService
+}
+
+// GetHostAuthService returns the host authentication service.
+func (s *Server) GetHostAuthService() *HostAuthService {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.hostAuthService
 }
 
 // GenerateAgentToken generates a JWT for an agent.
@@ -416,6 +441,10 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/groups/", s.handleGroupRoutes)
 	s.mux.HandleFunc("/api/v1/policies", s.handlePolicies)
 	s.mux.HandleFunc("/api/v1/policies/", s.handlePolicyRoutes)
+
+	// Host registration endpoints (Runtime Host HMAC authentication)
+	s.mux.HandleFunc("/api/v1/hosts", s.handleHostsEndpoint)
+	s.mux.HandleFunc("/api/v1/hosts/join", s.handleHostJoin)
 }
 
 // applyMiddleware wraps the handler with middleware.
@@ -423,6 +452,12 @@ func (s *Server) applyMiddleware(h http.Handler) http.Handler {
 	// Apply middleware in reverse order (last applied runs first)
 	h = s.recoveryMiddleware(h)
 	h = s.loggingMiddleware(h)
+
+	// Apply host auth middleware (checks X-Scion-Host-ID header for HMAC auth)
+	// This runs after unified auth but before the handler, allowing hosts to authenticate
+	if s.hostAuthService != nil {
+		h = HostAuthMiddleware(s.hostAuthService)(h)
+	}
 
 	// Apply unified auth middleware
 	// This handles all authentication types: agent tokens, user tokens, API keys, dev tokens

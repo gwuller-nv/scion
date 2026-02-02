@@ -308,6 +308,42 @@ const (
 	VisibilityPublic  = api.VisibilityPublic
 )
 
+// =============================================================================
+// Host Authentication (Runtime Host HMAC Authentication)
+// =============================================================================
+
+// HostSecret stores the HMAC shared secret for a Runtime Host.
+type HostSecret struct {
+	HostID    string    `json:"hostId"`
+	SecretKey []byte    `json:"-"` // Never serialize - stored encrypted at rest
+	Algorithm string    `json:"algorithm"` // "hmac-sha256"
+	CreatedAt time.Time `json:"createdAt"`
+	RotatedAt time.Time `json:"rotatedAt,omitempty"`
+	ExpiresAt time.Time `json:"expiresAt,omitempty"`
+	Status    string    `json:"status"` // active, deprecated, revoked
+}
+
+// HostSecretStatus constants
+const (
+	HostSecretStatusActive     = "active"
+	HostSecretStatusDeprecated = "deprecated"
+	HostSecretStatusRevoked    = "revoked"
+)
+
+// HostSecretAlgorithm constants
+const (
+	HostSecretAlgorithmHMACSHA256 = "hmac-sha256"
+)
+
+// HostJoinToken is a short-lived token for host registration.
+type HostJoinToken struct {
+	HostID    string    `json:"hostId"`
+	TokenHash string    `json:"-"` // SHA-256 hash of token (never exposed)
+	ExpiresAt time.Time `json:"expiresAt"`
+	CreatedAt time.Time `json:"createdAt"`
+	CreatedBy string    `json:"createdBy"` // User ID who created the token
+}
+
 // HostMode constants
 const (
 	HostModeConnected = "connected"

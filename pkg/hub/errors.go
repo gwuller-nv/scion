@@ -24,20 +24,28 @@ type ErrorResponse struct {
 
 // Error codes matching the Hub API specification.
 const (
-	ErrCodeInvalidRequest       = "invalid_request"
-	ErrCodeValidationError      = "validation_error"
-	ErrCodeUnauthorized         = "unauthorized"
-	ErrCodeForbidden            = "forbidden"
-	ErrCodeNotFound             = "not_found"
-	ErrCodeConflict             = "conflict"
-	ErrCodeVersionConflict      = "version_conflict"
-	ErrCodeUnprocessable        = "unprocessable"
-	ErrCodeRateLimited          = "rate_limited"
-	ErrCodeInternalError        = "internal_error"
-	ErrCodeRuntimeError         = "runtime_error"
-	ErrCodeUnavailable          = "unavailable"
-	ErrCodeNoRuntimeHost        = "no_runtime_host"
-	ErrCodeRuntimeHostUnavail   = "runtime_host_unavailable"
+	ErrCodeInvalidRequest     = "invalid_request"
+	ErrCodeValidationError    = "validation_error"
+	ErrCodeUnauthorized       = "unauthorized"
+	ErrCodeForbidden          = "forbidden"
+	ErrCodeNotFound           = "not_found"
+	ErrCodeConflict           = "conflict"
+	ErrCodeVersionConflict    = "version_conflict"
+	ErrCodeUnprocessable      = "unprocessable"
+	ErrCodeRateLimited        = "rate_limited"
+	ErrCodeInternalError      = "internal_error"
+	ErrCodeRuntimeError       = "runtime_error"
+	ErrCodeUnavailable        = "unavailable"
+	ErrCodeNoRuntimeHost      = "no_runtime_host"
+	ErrCodeRuntimeHostUnavail = "runtime_host_unavailable"
+
+	// Host authentication error codes
+	ErrCodeInvalidJoinToken = "invalid_join_token"
+	ErrCodeExpiredJoinToken = "expired_join_token"
+	ErrCodeHostAuthFailed   = "host_auth_failed"
+	ErrCodeInvalidSignature = "invalid_signature"
+	ErrCodeClockSkew        = "clock_skew"
+	ErrCodeReplayDetected   = "replay_detected"
 )
 
 // writeError writes a JSON error response.
