@@ -78,14 +78,16 @@ type mockHubClient struct {
 	templates hubclient.TemplateService
 }
 
-func (m *mockHubClient) Agents() hubclient.AgentService       { return nil }
-func (m *mockHubClient) Groves() hubclient.GroveService       { return nil }
-func (m *mockHubClient) RuntimeHosts() hubclient.RuntimeHostService { return nil }
-func (m *mockHubClient) Templates() hubclient.TemplateService { return m.templates }
-func (m *mockHubClient) Users() hubclient.UserService         { return nil }
-func (m *mockHubClient) Env() hubclient.EnvService            { return nil }
-func (m *mockHubClient) Secrets() hubclient.SecretService     { return nil }
-func (m *mockHubClient) Auth() hubclient.AuthService          { return nil }
+func (m *mockHubClient) Agents() hubclient.AgentService                  { return nil }
+func (m *mockHubClient) GroveAgents(groveID string) hubclient.AgentService { return nil }
+func (m *mockHubClient) Groves() hubclient.GroveService                  { return nil }
+func (m *mockHubClient) RuntimeHosts() hubclient.RuntimeHostService      { return nil }
+func (m *mockHubClient) Templates() hubclient.TemplateService            { return m.templates }
+func (m *mockHubClient) Workspace() hubclient.WorkspaceService           { return nil }
+func (m *mockHubClient) Users() hubclient.UserService                    { return nil }
+func (m *mockHubClient) Env() hubclient.EnvService                       { return nil }
+func (m *mockHubClient) Secrets() hubclient.SecretService                { return nil }
+func (m *mockHubClient) Auth() hubclient.AuthService                     { return nil }
 func (m *mockHubClient) Health(ctx context.Context) (*hubclient.HealthResponse, error) {
 	return nil, nil
 }

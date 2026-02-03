@@ -29,6 +29,9 @@ func TestNew(t *testing.T) {
 	if client.Templates() == nil {
 		t.Error("expected non-nil templates service")
 	}
+	if client.Workspace() == nil {
+		t.Error("expected non-nil workspace service")
+	}
 	if client.Users() == nil {
 		t.Error("expected non-nil users service")
 	}

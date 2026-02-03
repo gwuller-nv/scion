@@ -1147,24 +1147,24 @@ All open questions have been resolved with the following decisions:
 - [x] Add `StorageBucket` and `WorktreeBase` config options to ServerConfig
 - [x] Add unit tests for workspace handlers
 
-### Phase 3: Hub Client & CLI (Day 4)
+### Phase 3: Hub Client & CLI (Day 4) ✅
 
 **Goal:** Add workspace client and update CLI sync command.
 
-- [ ] Create `pkg/hubclient/workspace.go`:
-  - [ ] `WorkspaceService` interface
-  - [ ] `SyncFrom()` method
-  - [ ] `SyncTo()` method
-  - [ ] `FinalizeSyncTo()` method
-  - [ ] `GetStatus()` method
-- [ ] Update `cmd/sync.go`:
-  - [ ] Add hosted mode detection via `CheckHubAvailability()`
-  - [ ] Implement `syncViaHub()` for hosted mode
-  - [ ] Implement `syncFromViaHub()` with incremental download
-  - [ ] Implement `syncToViaHub()` with incremental upload
-  - [ ] Add `--dry-run` flag support
-  - [ ] Add progress output
-- [ ] Use `transfer.Client` for file operations
+- [x] Create `pkg/hubclient/workspace.go`:
+  - [x] `WorkspaceService` interface
+  - [x] `SyncFrom()` method
+  - [x] `SyncTo()` method
+  - [x] `FinalizeSyncTo()` method
+  - [x] `GetStatus()` method
+- [x] Update `cmd/sync.go`:
+  - [x] Add hosted mode detection via `CheckHubAvailability()`
+  - [x] Implement `syncViaHub()` for hosted mode
+  - [x] Implement `syncFromViaHub()` with incremental download
+  - [x] Implement `syncToViaHub()` with incremental upload
+  - [x] Add `--dry-run` flag support
+  - [x] Add progress output
+- [x] Use `transfer.Client` for file operations
 
 ### Phase 4: Testing & Polish (Day 5)
 

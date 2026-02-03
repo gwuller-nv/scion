@@ -28,6 +28,9 @@ type Client interface {
 	// Templates returns the template operations interface.
 	Templates() TemplateService
 
+	// Workspace returns the workspace sync operations interface.
+	Workspace() WorkspaceService
+
 	// Users returns the user operations interface.
 	Users() UserService
 
@@ -52,6 +55,7 @@ type client struct {
 	groves        *groveService
 	runtimeHosts  *runtimeHostService
 	templates     *templateService
+	workspace     *workspaceService
 	users         *userService
 	env           *envService
 	secrets       *secretService
@@ -73,6 +77,7 @@ func New(baseURL string, opts ...Option) (Client, error) {
 	c.groves = &groveService{c: c}
 	c.runtimeHosts = &runtimeHostService{c: c}
 	c.templates = &templateService{c: c}
+	c.workspace = &workspaceService{c: c}
 	c.users = &userService{c: c}
 	c.env = &envService{c: c}
 	c.secrets = &secretService{c: c}
@@ -104,6 +109,11 @@ func (c *client) RuntimeHosts() RuntimeHostService {
 // Templates returns the template operations interface.
 func (c *client) Templates() TemplateService {
 	return c.templates
+}
+
+// Workspace returns the workspace sync operations interface.
+func (c *client) Workspace() WorkspaceService {
+	return c.workspace
 }
 
 // Users returns the user operations interface.
