@@ -389,13 +389,14 @@ func ExecuteSync(ctx context.Context, hubCtx *HubContext, result *SyncResult) er
 	debugf("ExecuteSync starting: groveID=%s, hostID=%s", hubCtx.GroveID, hubCtx.HostID)
 
 	// Register local agents on Hub
+	// Note: We don't specify a runtime host ID - the hub will resolve it based on
+	// available grove contributors (single contributor = auto-select, multiple = error)
 	for _, name := range result.ToRegister {
 		fmt.Printf("Registering agent '%s' on Hub...\n", name)
-		debugf("Creating agent: name=%s, groveID=%s, hostID=%s", name, hubCtx.GroveID, hubCtx.HostID)
+		debugf("Creating agent: name=%s, groveID=%s (hub will resolve runtime host)", name, hubCtx.GroveID)
 		req := &hubclient.CreateAgentRequest{
-			Name:          name,
-			GroveID:       hubCtx.GroveID,
-			RuntimeHostID: hubCtx.HostID,
+			Name:    name,
+			GroveID: hubCtx.GroveID,
 		}
 		resp, err := hubCtx.Client.GroveAgents(hubCtx.GroveID).Create(ctxTimeout, req)
 		if err != nil {

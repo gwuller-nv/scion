@@ -3139,14 +3139,21 @@ func (s *Server) getHarnessFromTemplate(template *store.Template, fallback strin
 
 // resolveRuntimeHost determines which runtime host should run the agent.
 // Priority order:
-//  1. Explicitly specified host (requestedHostID) - verified to be available
-//  2. Grove's default runtime host - verified to be available
-//  3. Single available contributor - used automatically
-//  4. Multiple available contributors - returns error requiring explicit selection
-//  5. No available hosts - returns error
+//  1. Explicitly specified host (requestedHostID) - verified to be a contributor
+//  2. Grove's default runtime host - verified to be available (online)
+//  3. Single contributor (any status) - used automatically
+//  4. Multiple contributors with online hosts - returns error requiring explicit selection
+//  5. No contributors - returns error
 // Returns the runtime host ID or an error (after writing the HTTP error response).
 func (s *Server) resolveRuntimeHost(ctx context.Context, w http.ResponseWriter, requestedHostID string, grove *store.Grove) (string, error) {
-	// Get available hosts for this grove (online hosts that are contributors)
+	// Get ALL contributors for this grove (regardless of status)
+	allContributors, err := s.store.GetGroveContributors(ctx, grove.ID)
+	if err != nil {
+		writeErrorFromErr(w, err, "")
+		return "", err
+	}
+
+	// Get available (online) hosts for fallback logic
 	availableHosts, err := s.getAvailableHostsForGrove(ctx, grove.ID)
 	if err != nil {
 		writeErrorFromErr(w, err, "")
@@ -3165,18 +3172,18 @@ func (s *Server) resolveRuntimeHost(ctx context.Context, w http.ResponseWriter, 
 
 	// Case 1: Explicit runtime host specified
 	if requestedHostID != "" {
-		// Check if the requested host is available
-		for _, h := range availableHosts {
-			if h.ID == requestedHostID {
+		// Check if the requested host is a contributor to this grove
+		for _, c := range allContributors {
+			if c.HostID == requestedHostID {
 				return requestedHostID, nil
 			}
 		}
-		// Requested host not available
+		// Requested host is not a contributor
 		RuntimeHostUnavailable(w, requestedHostID, hostSummaries)
 		return "", store.ErrNotFound
 	}
 
-	// Case 2: Use grove's default runtime host
+	// Case 2: Use grove's default runtime host (must be online)
 	if grove.DefaultRuntimeHostID != "" {
 		// Check if the default host is still available
 		for _, h := range availableHosts {
@@ -3193,14 +3200,18 @@ func (s *Server) resolveRuntimeHost(ctx context.Context, w http.ResponseWriter, 
 		return "", store.ErrNotFound
 	}
 
-	// Case 3: No default and no explicit host - use single contributor or require explicit selection
+	// Case 3: No default and no explicit host - check for single contributor
+	// If there's exactly one contributor, use it regardless of online status
+	// (the dispatch will fail gracefully if the host is truly unavailable)
+	if len(allContributors) == 1 {
+		return allContributors[0].HostID, nil
+	}
+
+	// Case 4: Multiple contributors - require explicit selection from online hosts
 	switch len(availableHosts) {
 	case 0:
 		NoRuntimeHost(w, "No runtime hosts available for this grove; register a runtime host first", hostSummaries)
 		return "", store.ErrNotFound
-	case 1:
-		// Single available host - use it by default
-		return availableHosts[0].ID, nil
 	default:
 		// Multiple hosts available - require explicit selection
 		NoRuntimeHost(w, "Multiple runtime hosts available for this grove; specify runtimeHostId to select one", hostSummaries)
