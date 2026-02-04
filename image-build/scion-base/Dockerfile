@@ -10,6 +10,10 @@ WORKDIR /src
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV CGO_ENABLED=1
 
+# Build arguments for version info
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIME
+
 # Copy go.mod and go.sum first for better layer caching
 COPY go.mod go.sum ./
 RUN go mod download
@@ -17,8 +21,16 @@ RUN go mod download
 # Copy source and build scion and sciontool
 COPY cmd/ ./cmd/
 COPY pkg/ ./pkg/
-RUN go build -ldflags="-s -w" -o /usr/local/bin/scion ./cmd/scion/ && \
-    go build -ldflags="-s -w" -o /usr/local/bin/sciontool ./cmd/sciontool/
+
+# Build with version info injected via ldflags
+# BUILD_TIME is computed at build time if not provided
+RUN BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" && \
+    SCION_PKG="github.com/ptone/scion-agent/pkg/version" && \
+    SCIONTOOL_PKG="github.com/ptone/scion-agent/cmd/sciontool/commands" && \
+    go build -ldflags="-s -w -X ${SCION_PKG}.Commit=${GIT_COMMIT} -X ${SCION_PKG}.BuildTime=${BUILD_TIME}" \
+        -o /usr/local/bin/scion ./cmd/scion/ && \
+    go build -ldflags="-s -w -X ${SCIONTOOL_PKG}.Commit=${GIT_COMMIT} -X ${SCIONTOOL_PKG}.BuildTime=${BUILD_TIME}" \
+        -o /usr/local/bin/sciontool ./cmd/sciontool/
 
 # Final stage
 FROM base
