@@ -417,6 +417,6 @@ runtimeHost:
 
 	// Note: Env var override for runtimeHost.hubEndpoint doesn't work due to case sensitivity
 	// in koanf. The env var SCION_SERVER_RUNTIMEHOST_HUBENDPOINT maps to "runtimehost.hubEndpoint"
-	// but the config expects "runtimeHost.hubEndpoint" (camelCase). This is a known limitation.
+	// but the config expects "runtimeBroker.hubEndpoint" (camelCase). This is a known limitation.
 	// For RuntimeBroker hubEndpoint, use config file or the settings.yaml fallback (Fix 6).
 }

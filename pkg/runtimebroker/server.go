@@ -74,7 +74,7 @@ type ServerConfig struct {
 	// Host credentials settings
 	// BrokerCredentialsPath is the path to the host credentials file.
 	// If set, HMAC authentication will be used instead of bearer tokens.
-	// Defaults to ~/.scion/host-credentials.json if not specified.
+	// Defaults to ~/.scion/broker-credentials.json if not specified.
 	BrokerCredentialsPath string
 
 	// HostAuthEnabled enables HMAC verification for incoming requests from the Hub.

@@ -18,7 +18,7 @@ func TestParseEnvelope(t *testing.T) {
 	}{
 		{
 			name:     "connect message",
-			input:    `{"type":"connect","hostId":"host-1"}`,
+			input:    `{"type":"connect","brokerId":"host-1"}`,
 			wantType: TypeConnect,
 		},
 		{
@@ -206,7 +206,7 @@ func TestPTYMessages(t *testing.T) {
 
 func TestParseMessage(t *testing.T) {
 	t.Run("parse connect message", func(t *testing.T) {
-		data := []byte(`{"type":"connect","hostId":"host-1","version":"1.0.0"}`)
+		data := []byte(`{"type":"connect","brokerId":"host-1","version":"1.0.0"}`)
 		msg, err := ParseMessage[ConnectMessage](data)
 		require.NoError(t, err)
 		assert.Equal(t, "host-1", msg.BrokerID)

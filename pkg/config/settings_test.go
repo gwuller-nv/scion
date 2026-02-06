@@ -509,7 +509,7 @@ func TestUpdateHubSettingsGlobal(t *testing.T) {
 	})
 
 	t.Run("save hub hostId to global settings", func(t *testing.T) {
-		err := UpdateSetting(globalScionDir, "hub.hostId", "host-uuid-123", true)
+		err := UpdateSetting(globalScionDir, "hub.brokerId", "host-uuid-123", true)
 		if err != nil {
 			t.Fatalf("UpdateSetting failed: %v", err)
 		}
@@ -524,7 +524,7 @@ func TestUpdateHubSettingsGlobal(t *testing.T) {
 		}
 
 		if s.Hub.BrokerID != "host-uuid-123" {
-			t.Errorf("expected hub.hostId 'host-uuid-123', got %q", s.Hub.BrokerID)
+			t.Errorf("expected hub.brokerId 'host-uuid-123', got %q", s.Hub.BrokerID)
 		}
 
 		// Previous setting should still be present
@@ -551,7 +551,7 @@ func TestHubSettingsLoadFromGlobal(t *testing.T) {
 	globalSettings := `{
 		"hub": {
 			"endpoint": "https://global-hub.example.com",
-			"hostId": "global-host-id"
+			"brokerId": "global-host-id"
 		}
 	}`
 	if err := os.WriteFile(filepath.Join(globalScionDir, "settings.json"), []byte(globalSettings), 0644); err != nil {
@@ -580,6 +580,6 @@ func TestHubSettingsLoadFromGlobal(t *testing.T) {
 	}
 
 	if s.Hub.BrokerID != "global-host-id" {
-		t.Errorf("expected hub.hostId from global, got %q", s.Hub.BrokerID)
+		t.Errorf("expected hub.brokerId from global, got %q", s.Hub.BrokerID)
 	}
 }

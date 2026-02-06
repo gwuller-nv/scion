@@ -15,7 +15,7 @@ import (
 
 const (
 	// DefaultFileName is the default name of the host credentials file.
-	DefaultFileName = "host-credentials.json"
+	DefaultFileName = "broker-credentials.json"
 	// FileMode is the file permissions for the credentials file (owner read/write only).
 	FileMode = 0600
 	// DirMode is the directory permissions (owner rwx only).
@@ -32,7 +32,7 @@ var (
 // BrokerCredentials contains the credentials for a Runtime Host.
 type BrokerCredentials struct {
 	// HostID is the unique identifier for this host.
-	BrokerID string `json:"hostId"`
+	BrokerID string `json:"brokerId"`
 	// SecretKey is the base64-encoded shared secret for HMAC authentication.
 	SecretKey string `json:"secretKey"`
 	// HubEndpoint is the URL of the Hub API.
@@ -57,7 +57,7 @@ func NewStore(path string) *Store {
 }
 
 // DefaultPath returns the default path to the host credentials file.
-// This is ~/.scion/host-credentials.json
+// This is ~/.scion/broker-credentials.json
 func DefaultPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {

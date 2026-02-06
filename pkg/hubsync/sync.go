@@ -606,7 +606,7 @@ func registerGrove(ctx context.Context, hubCtx *HubContext, groveName string, is
 			}
 		}
 		if resp.Host != nil && resp.Host.ID != "" {
-			if err := config.UpdateSetting(globalDir, "hub.hostId", resp.Host.ID, true); err != nil {
+			if err := config.UpdateSetting(globalDir, "hub.brokerId", resp.Host.ID, true); err != nil {
 				fmt.Printf("Warning: failed to save host ID: %v\n", err)
 			}
 		}
@@ -699,7 +699,7 @@ func containsIgnoreCase(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
-// cleanupGroveBrokerCredentials removes stale hub.hostId and hub.brokerToken from
+// cleanupGroveBrokerCredentials removes stale hub.brokerId and hub.brokerToken from
 // grove settings. These should only exist in global settings, not grove-specific.
 // Earlier versions of scion incorrectly wrote them to grove settings.
 func cleanupGroveBrokerCredentials(grovePath string) {
@@ -715,7 +715,7 @@ func cleanupGroveBrokerCredentials(grovePath string) {
 
 	// Check if the file contains hostId or brokerToken
 	content := string(data)
-	if !strings.Contains(content, "hostId") && !strings.Contains(content, "brokerToken") {
+	if !strings.Contains(content, "brokerId") && !strings.Contains(content, "brokerToken") {
 		return
 	}
 
@@ -742,10 +742,10 @@ func cleanupGroveBrokerCredentials(grovePath string) {
 	}
 
 	modified := false
-	if _, hasHostId := hubSection["hostId"]; hasHostId {
-		delete(hubSection, "hostId")
+	if _, hasHostId := hubSection["brokerId"]; hasHostId {
+		delete(hubSection, "brokerId")
 		modified = true
-		debugf("Removed stale hub.hostId from grove settings")
+		debugf("Removed stale hub.brokerId from grove settings")
 	}
 	if _, hasHostToken := hubSection["brokerToken"]; hasHostToken {
 		delete(hubSection, "brokerToken")

@@ -784,7 +784,7 @@ func TestGroveRegisterWithHostID(t *testing.T) {
 	body := map[string]interface{}{
 		"name":      "Two Phase Grove",
 		"gitRemote": "https://github.com/test/twophase-grove",
-		"hostId":    broker.ID,
+		"brokerId":    broker.ID,
 		"path":      "/path/to/project/.scion",
 	}
 
@@ -841,7 +841,7 @@ func TestGroveRegisterWithInvalidHostID(t *testing.T) {
 	body := map[string]interface{}{
 		"name":      "Invalid Host Grove",
 		"gitRemote": "https://github.com/test/invalid-host-grove",
-		"hostId":    "non-existent-host-id",
+		"brokerId":    "non-existent-host-id",
 	}
 
 	rec := doRequest(t, srv, http.MethodPost, "/api/v1/groves/register", body)
@@ -890,7 +890,7 @@ func TestAddContributor(t *testing.T) {
 
 	// Add contributor via API
 	body := map[string]interface{}{
-		"hostId":    broker.ID,
+		"brokerId":    broker.ID,
 		"localPath": "/home/user/project/.scion",
 		"mode":      "connected",
 	}
@@ -1229,7 +1229,7 @@ func TestHostRegistrationTwoPhaseFlow(t *testing.T) {
 
 	// Phase 2: Complete host join (unauthenticated - join token is auth)
 	joinBody := map[string]interface{}{
-		"hostId":       createResp.BrokerID,
+		"brokerId":       createResp.BrokerID,
 		"joinToken":    createResp.JoinToken,
 		"hostname":     "test-machine",
 		"version":      "1.0.0",
@@ -1257,7 +1257,7 @@ func TestHostRegistrationTwoPhaseFlow(t *testing.T) {
 	groveBody := map[string]interface{}{
 		"name":      "Two Phase Grove",
 		"gitRemote": "https://github.com/test/twophase",
-		"hostId":    joinResp.BrokerID,
+		"brokerId":    joinResp.BrokerID,
 	}
 
 	rec3 := doRequest(t, srv, http.MethodPost, "/api/v1/groves/register", groveBody)
@@ -1305,7 +1305,7 @@ func TestHostJoinWithInvalidToken(t *testing.T) {
 
 	// Try to join with invalid token
 	joinBody := map[string]interface{}{
-		"hostId":    createResp.BrokerID,
+		"brokerId":    createResp.BrokerID,
 		"joinToken": "invalid_token",
 		"hostname":  "test-machine",
 	}

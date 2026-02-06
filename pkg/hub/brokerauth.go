@@ -129,14 +129,14 @@ type CreateHostRegistrationRequest struct {
 
 // CreateHostRegistrationResponse is the response for POST /api/v1/hosts.
 type CreateHostRegistrationResponse struct {
-	BrokerID string    `json:"hostId"`
+	BrokerID string    `json:"brokerId"`
 	JoinToken string    `json:"joinToken"` // scion_join_<base64>
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
 // HostJoinRequest is the request body for POST /api/v1/hosts/join.
 type HostJoinRequest struct {
-	BrokerID string   `json:"hostId"`
+	BrokerID string   `json:"brokerId"`
 	JoinToken    string   `json:"joinToken"`
 	Hostname     string   `json:"hostname"`
 	Version      string   `json:"version"`
@@ -147,7 +147,7 @@ type HostJoinRequest struct {
 type HostJoinResponse struct {
 	SecretKey   string `json:"secretKey"` // Base64-encoded 256-bit key
 	HubEndpoint string `json:"hubEndpoint"`
-	BrokerID string `json:"hostId"`
+	BrokerID string `json:"brokerId"`
 }
 
 // JoinTokenPrefix is the prefix for join tokens.

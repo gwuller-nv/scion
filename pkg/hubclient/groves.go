@@ -80,7 +80,7 @@ type RegisterGroveRequest struct {
 	Name      string            `json:"name"`
 	GitRemote string            `json:"gitRemote"`
 	Path      string            `json:"path,omitempty"`
-	BrokerID string            `json:"hostId,omitempty"`  // Link to existing host (two-phase flow)
+	BrokerID string            `json:"brokerId,omitempty"`  // Link to existing host (two-phase flow)
 	Host      *HostInfo         `json:"host,omitempty"`    // DEPRECATED: Use HostID with two-phase registration
 	Profiles  []string          `json:"profiles,omitempty"`
 	Mode      string            `json:"mode,omitempty"`    // connected, read-only
@@ -128,7 +128,7 @@ type ListContributorsResponse struct {
 
 // AddContributorRequest is the request for adding a host as a grove contributor.
 type AddContributorRequest struct {
-	BrokerID string `json:"hostId"`
+	BrokerID string `json:"brokerId"`
 	LocalPath string `json:"localPath,omitempty"`
 	Mode      string `json:"mode,omitempty"` // "connected" or "read-only"
 }
@@ -149,7 +149,7 @@ func (s *groveService) List(ctx context.Context, opts *ListGrovesOptions) (*List
 			query.Set("gitRemote", opts.GitRemote)
 		}
 		if opts.BrokerID != "" {
-			query.Set("hostId", opts.BrokerID)
+			query.Set("brokerId", opts.BrokerID)
 		}
 		if opts.Name != "" {
 			query.Set("name", opts.Name)

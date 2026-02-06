@@ -219,7 +219,7 @@ func promptHubRegistration(isGlobal bool) error {
 				_ = config.UpdateSetting(globalDir, "hub.brokerToken", resp.BrokerToken, true)
 			}
 			if resp.Host != nil && resp.Host.ID != "" {
-				_ = config.UpdateSetting(globalDir, "hub.hostId", resp.Host.ID, true)
+				_ = config.UpdateSetting(globalDir, "hub.brokerId", resp.Host.ID, true)
 			}
 		}
 

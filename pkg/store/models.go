@@ -164,7 +164,7 @@ type BrokerProfile struct {
 // GroveContributor links a runtime host to a grove.
 type GroveContributor struct {
 	GroveID   string    `json:"groveId"`
-	BrokerID string    `json:"hostId"`
+	BrokerID string    `json:"brokerId"`
 	BrokerName string    `json:"brokerName"`
 	LocalPath string    `json:"localPath,omitempty"` // Filesystem path to the grove on this host (e.g., ~/.scion or /path/to/project/.scion)
 	Mode      string    `json:"mode"`                // connected, read-only
@@ -314,7 +314,7 @@ const (
 
 // BrokerSecret stores the HMAC shared secret for a Runtime Host.
 type BrokerSecret struct {
-	BrokerID string    `json:"hostId"`
+	BrokerID string    `json:"brokerId"`
 	SecretKey []byte    `json:"-"` // Never serialize - stored encrypted at rest
 	Algorithm string    `json:"algorithm"` // "hmac-sha256"
 	CreatedAt time.Time `json:"createdAt"`
@@ -337,7 +337,7 @@ const (
 
 // BrokerJoinToken is a short-lived token for host registration.
 type BrokerJoinToken struct {
-	BrokerID string    `json:"hostId"`
+	BrokerID string    `json:"brokerId"`
 	TokenHash string    `json:"-"` // SHA-256 hash of token (never exposed)
 	ExpiresAt time.Time `json:"expiresAt"`
 	CreatedAt time.Time `json:"createdAt"`

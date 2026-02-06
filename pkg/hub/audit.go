@@ -29,7 +29,7 @@ const (
 // HostAuthEvent represents an auditable event related to host authentication.
 type HostAuthEvent struct {
 	EventType  HostAuthEventType `json:"eventType"`
-	BrokerID string            `json:"hostId"`
+	BrokerID string            `json:"brokerId"`
 	BrokerName string            `json:"brokerName,omitempty"`
 	IPAddress  string            `json:"ipAddress,omitempty"`
 	UserAgent  string            `json:"userAgent,omitempty"`

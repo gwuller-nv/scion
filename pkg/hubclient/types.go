@@ -82,7 +82,7 @@ type Grove struct {
 
 // GroveContributor represents a host contributing to a grove.
 type GroveContributor struct {
-	BrokerID string    `json:"hostId"`
+	BrokerID string    `json:"brokerId"`
 	BrokerName string    `json:"brokerName"`
 	Mode      string    `json:"mode"`
 	Status    string    `json:"status"`

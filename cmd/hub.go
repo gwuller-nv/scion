@@ -287,10 +287,10 @@ func runHubStatus(cmd *cobra.Command, args []string) error {
 			"groveId":       settings.GroveID,
 		}
 		if settings.Hub != nil {
-			status["hostId"] = settings.Hub.BrokerID
+			status["brokerId"] = settings.Hub.BrokerID
 			status["hasToken"] = settings.Hub.Token != ""
 			status["hasApiKey"] = settings.Hub.APIKey != ""
-			status["hasHostToken"] = settings.Hub.BrokerToken != ""
+			status["hasBrokerToken"] = settings.Hub.BrokerToken != ""
 		}
 
 		// Add auth info to JSON output
@@ -585,7 +585,7 @@ func runHubRegister(cmd *cobra.Command, args []string) error {
 		}
 
 		// Save the host ID to global settings
-		if err := config.UpdateSetting(globalDir, "hub.hostId", brokerID, true); err != nil {
+		if err := config.UpdateSetting(globalDir, "hub.brokerId", brokerID, true); err != nil {
 			fmt.Printf("Warning: failed to save host ID: %v\n", err)
 		}
 	}
@@ -648,7 +648,7 @@ func runHubDeregister(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Warning: failed to get global directory: %v\n", globalErr)
 	} else {
 		_ = config.UpdateSetting(globalDir, "hub.brokerToken", "", true)
-		_ = config.UpdateSetting(globalDir, "hub.hostId", "", true)
+		_ = config.UpdateSetting(globalDir, "hub.brokerId", "", true)
 	}
 
 	fmt.Printf("Host %s deregistered from Hub\n", brokerID)

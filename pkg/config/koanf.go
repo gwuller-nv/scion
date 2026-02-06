@@ -62,8 +62,8 @@ func LoadSettingsKoanf(grovePath string) (*Settings, error) {
 	//       SCION_HUB_ENDPOINT -> hub.endpoint
 	//       SCION_HUB_TOKEN -> hub.token
 	//       SCION_HUB_API_KEY -> hub.apiKey
-	//       SCION_HUB_HOST_ID -> hub.hostId
-	//       SCION_HUB_HOST_TOKEN -> hub.brokerToken
+	//       SCION_HUB_BROKER_ID -> hub.brokerId
+	//       SCION_HUB_BROKER_TOKEN -> hub.brokerToken
 	_ = k.Load(env.Provider("SCION_", ".", func(s string) string {
 		key := strings.ToLower(strings.TrimPrefix(s, "SCION_"))
 		// Handle nested bucket keys
@@ -78,8 +78,8 @@ func LoadSettingsKoanf(grovePath string) (*Settings, error) {
 			case "api_key":
 				return "hub.apiKey"
 			case "broker_id":
-				return "hub.hostId"
-			case "host_token":
+				return "hub.brokerId"
+			case "broker_token":
 				return "hub.brokerToken"
 			default:
 				return "hub." + subkey

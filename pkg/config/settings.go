@@ -84,10 +84,10 @@ type HubClientConfig struct {
 	GroveID string `json:"groveId,omitempty" yaml:"groveId,omitempty" koanf:"groveId"`
 	// HostID is the unique identifier for this host when registered with the Hub.
 	// This is a durable UUID that persists across server restarts.
-	BrokerID string `json:"hostId,omitempty" yaml:"hostId,omitempty" koanf:"hostId"`
+	BrokerID string `json:"brokerId,omitempty" yaml:"brokerId,omitempty" koanf:"brokerId"`
 	// HostNickname is a human-readable name for this host.
 	// If not set, defaults to the system hostname.
-	BrokerNickname string `json:"hostNickname,omitempty" yaml:"hostNickname,omitempty" koanf:"hostNickname"`
+	BrokerNickname string `json:"brokerNickname,omitempty" yaml:"brokerNickname,omitempty" koanf:"brokerNickname"`
 	// HostToken is the token received when registering this host with the Hub
 	BrokerToken string `json:"brokerToken,omitempty" yaml:"brokerToken,omitempty" koanf:"brokerToken"`
 }
@@ -532,7 +532,7 @@ func UpdateSetting(grovePath string, key string, value string, global bool) erro
 			current.Hub = &HubClientConfig{}
 		}
 		current.Hub.GroveID = value
-	case "hub.hostId":
+	case "hub.brokerId":
 		if current.Hub == nil {
 			current.Hub = &HubClientConfig{}
 		}
@@ -542,7 +542,7 @@ func UpdateSetting(grovePath string, key string, value string, global bool) erro
 			current.Hub = &HubClientConfig{}
 		}
 		current.Hub.BrokerToken = value
-	case "hub.hostNickname":
+	case "hub.brokerNickname":
 		if current.Hub == nil {
 			current.Hub = &HubClientConfig{}
 		}
@@ -632,7 +632,7 @@ func GetSettingValue(s *Settings, key string) (string, error) {
 			return s.Hub.GroveID, nil
 		}
 		return "", nil
-	case "hub.hostId":
+	case "hub.brokerId":
 		if s.Hub != nil {
 			return s.Hub.BrokerID, nil
 		}
@@ -642,7 +642,7 @@ func GetSettingValue(s *Settings, key string) (string, error) {
 			return s.Hub.BrokerToken, nil
 		}
 		return "", nil
-	case "hub.hostNickname":
+	case "hub.brokerNickname":
 		if s.Hub != nil {
 			return s.Hub.BrokerNickname, nil
 		}
@@ -709,8 +709,8 @@ func GetSettingsMap(s *Settings) map[string]string {
 			m["hub.apiKey"] = "********" // Mask API key
 		}
 		m["hub.groveId"] = s.Hub.GroveID
-		m["hub.hostId"] = s.Hub.BrokerID
-		m["hub.hostNickname"] = s.Hub.BrokerNickname
+		m["hub.brokerId"] = s.Hub.BrokerID
+		m["hub.brokerNickname"] = s.Hub.BrokerNickname
 		if s.Hub.BrokerToken != "" {
 			m["hub.brokerToken"] = "********" // Mask host token
 		}

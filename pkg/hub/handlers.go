@@ -629,7 +629,7 @@ type RegisterGroveRequest struct {
 	Name      string            `json:"name"`
 	GitRemote string            `json:"gitRemote"`
 	Path      string            `json:"path,omitempty"`
-	BrokerID string            `json:"hostId,omitempty"`   // Link to existing host (two-phase flow)
+	BrokerID string            `json:"brokerId,omitempty"`   // Link to existing host (two-phase flow)
 	Host      *RegisterHostInfo `json:"host,omitempty"`     // DEPRECATED: Use HostID with two-phase registration
 	Profiles  []string          `json:"profiles,omitempty"`
 	Mode      string            `json:"mode,omitempty"`
@@ -654,7 +654,7 @@ type RegisterGroveResponse struct {
 
 // AddContributorRequest is the request for adding a host as a grove contributor.
 type AddContributorRequest struct {
-	BrokerID string `json:"hostId"`
+	BrokerID string `json:"brokerId"`
 	LocalPath string `json:"localPath,omitempty"`
 	Mode      string `json:"mode,omitempty"` // "connected" or "read-only"
 }
@@ -682,7 +682,7 @@ func (s *Server) listGroves(w http.ResponseWriter, r *http.Request) {
 	filter := store.GroveFilter{
 		Visibility:      query.Get("visibility"),
 		GitRemotePrefix: util.NormalizeGitRemote(query.Get("gitRemote")),
-		BrokerID:          query.Get("hostId"),
+		BrokerID:          query.Get("brokerId"),
 		Name:            query.Get("name"),
 	}
 
@@ -842,8 +842,8 @@ func (s *Server) handleGroveRegister(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			if err == store.ErrNotFound {
 				ValidationError(w, "hostId not found: host must be registered via POST /hosts and /hosts/join first", map[string]interface{}{
-					"field":  "hostId",
-					"hostId": req.BrokerID,
+					"field":  "brokerId",
+					"brokerId": req.BrokerID,
 				})
 				return
 			}
@@ -2831,8 +2831,8 @@ func (s *Server) addGroveContributor(w http.ResponseWriter, r *http.Request, gro
 	if err != nil {
 		if err == store.ErrNotFound {
 			ValidationError(w, "hostId not found", map[string]interface{}{
-				"field":  "hostId",
-				"hostId": req.BrokerID,
+				"field":  "brokerId",
+				"brokerId": req.BrokerID,
 			})
 			return
 		}

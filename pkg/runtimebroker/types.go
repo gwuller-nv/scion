@@ -22,7 +22,7 @@ type HealthResponse struct {
 
 // BrokerInfoResponse is the response for the /api/v1/info endpoint.
 type BrokerInfoResponse struct {
-	BrokerID string            `json:"hostId"`
+	BrokerID string            `json:"brokerId"`
 	Name         string            `json:"name,omitempty"`
 	Version      string            `json:"version"`
 	Mode         string            `json:"mode"`

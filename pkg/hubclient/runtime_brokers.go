@@ -96,14 +96,14 @@ type CreateBrokerRequest struct {
 
 // CreateBrokerResponse is returned when creating a new host.
 type CreateBrokerResponse struct {
-	BrokerID string `json:"hostId"`
+	BrokerID string `json:"brokerId"`
 	JoinToken string `json:"joinToken"`
 	ExpiresAt string `json:"expiresAt"`
 }
 
 // JoinBrokerRequest is the request to complete host registration.
 type JoinBrokerRequest struct {
-	BrokerID string   `json:"hostId"`
+	BrokerID string   `json:"brokerId"`
 	JoinToken    string   `json:"joinToken"`
 	Hostname     string   `json:"hostname"`
 	Version      string   `json:"version"`
@@ -114,7 +114,7 @@ type JoinBrokerRequest struct {
 type JoinBrokerResponse struct {
 	SecretKey   string `json:"secretKey"` // Base64-encoded HMAC secret
 	HubEndpoint string `json:"hubEndpoint"`
-	BrokerID string `json:"hostId"`
+	BrokerID string `json:"brokerId"`
 }
 
 // Create creates a new host registration and returns a join token.

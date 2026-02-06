@@ -55,7 +55,7 @@ type RuntimeBrokerConfig struct {
 	HubEndpoint string `json:"hubEndpoint" yaml:"hubEndpoint" koanf:"hubEndpoint"`
 
 	// HostID is a unique identifier for this runtime host (auto-generated if empty)
-	BrokerID string `json:"hostId" yaml:"hostId" koanf:"hostId"`
+	BrokerID string `json:"brokerId" yaml:"brokerId" koanf:"brokerId"`
 	// HostName is a human-readable name for this runtime host
 	BrokerName string `json:"brokerName" yaml:"brokerName" koanf:"brokerName"`
 
@@ -125,7 +125,7 @@ type GlobalConfig struct {
 	Hub HubServerConfig `json:"hub" yaml:"hub" koanf:"hub"`
 
 	// Runtime Host API server settings
-	RuntimeBroker RuntimeBrokerConfig `json:"runtimeHost" yaml:"runtimeHost" koanf:"runtimeHost"`
+	RuntimeBroker RuntimeBrokerConfig `json:"runtimeBroker" yaml:"runtimeBroker" koanf:"runtimeBroker"`
 
 	// Database settings
 	Database DatabaseConfig `json:"database" yaml:"database" koanf:"database"`
@@ -217,17 +217,17 @@ func LoadGlobalConfig(configPath string) (*GlobalConfig, error) {
 		"hub.corsAllowedHeaders": defaults.Hub.CORSAllowedHeaders,
 		"hub.corsMaxAge":         defaults.Hub.CORSMaxAge,
 		// RuntimeBroker defaults
-		"runtimeHost.enabled":            defaults.RuntimeBroker.Enabled,
-		"runtimeHost.port":               defaults.RuntimeBroker.Port,
-		"runtimeHost.host":               defaults.RuntimeBroker.Host,
-		"runtimeHost.readTimeout":        defaults.RuntimeBroker.ReadTimeout,
-		"runtimeHost.writeTimeout":       defaults.RuntimeBroker.WriteTimeout,
-		"runtimeHost.mode":               defaults.RuntimeBroker.Mode,
-		"runtimeHost.corsEnabled":        defaults.RuntimeBroker.CORSEnabled,
-		"runtimeHost.corsAllowedOrigins": defaults.RuntimeBroker.CORSAllowedOrigins,
-		"runtimeHost.corsAllowedMethods": defaults.RuntimeBroker.CORSAllowedMethods,
-		"runtimeHost.corsAllowedHeaders": defaults.RuntimeBroker.CORSAllowedHeaders,
-		"runtimeHost.corsMaxAge":         defaults.RuntimeBroker.CORSMaxAge,
+		"runtimeBroker.enabled":            defaults.RuntimeBroker.Enabled,
+		"runtimeBroker.port":               defaults.RuntimeBroker.Port,
+		"runtimeBroker.host":               defaults.RuntimeBroker.Host,
+		"runtimeBroker.readTimeout":        defaults.RuntimeBroker.ReadTimeout,
+		"runtimeBroker.writeTimeout":       defaults.RuntimeBroker.WriteTimeout,
+		"runtimeBroker.mode":               defaults.RuntimeBroker.Mode,
+		"runtimeBroker.corsEnabled":        defaults.RuntimeBroker.CORSEnabled,
+		"runtimeBroker.corsAllowedOrigins": defaults.RuntimeBroker.CORSAllowedOrigins,
+		"runtimeBroker.corsAllowedMethods": defaults.RuntimeBroker.CORSAllowedMethods,
+		"runtimeBroker.corsAllowedHeaders": defaults.RuntimeBroker.CORSAllowedHeaders,
+		"runtimeBroker.corsMaxAge":         defaults.RuntimeBroker.CORSMaxAge,
 		// Database defaults
 		"database.driver": defaults.Database.Driver,
 		"database.url":    defaults.Database.URL,
@@ -356,8 +356,8 @@ func envKeyToConfigKey(envKey string) string {
 		"clientsecret":      "clientSecret",
 		"readtimeout":       "readTimeout",
 		"writetimeout":      "writeTimeout",
-		"hostid":            "hostId",
-		"hostname":          "brokerName",
+		"brokerid":          "brokerId",
+		"brokername":        "brokerName",
 		"hubendpoint":       "hubEndpoint",
 		"devmode":           "devMode",
 		"devtoken":          "devToken",

@@ -11,7 +11,7 @@ import (
 
 func TestStore_SaveLoad(t *testing.T) {
 	tempDir := t.TempDir()
-	credPath := filepath.Join(tempDir, "host-credentials.json")
+	credPath := filepath.Join(tempDir, "broker-credentials.json")
 	store := NewStore(credPath)
 
 	creds := &BrokerCredentials{
@@ -46,7 +46,7 @@ func TestStore_SaveLoad(t *testing.T) {
 
 func TestStore_FilePermissions(t *testing.T) {
 	tempDir := t.TempDir()
-	credPath := filepath.Join(tempDir, "host-credentials.json")
+	credPath := filepath.Join(tempDir, "broker-credentials.json")
 	store := NewStore(credPath)
 
 	creds := &BrokerCredentials{
@@ -73,7 +73,7 @@ func TestStore_FilePermissions(t *testing.T) {
 
 func TestStore_Exists(t *testing.T) {
 	tempDir := t.TempDir()
-	credPath := filepath.Join(tempDir, "host-credentials.json")
+	credPath := filepath.Join(tempDir, "broker-credentials.json")
 	store := NewStore(credPath)
 
 	// Should not exist initially
@@ -96,7 +96,7 @@ func TestStore_Exists(t *testing.T) {
 
 func TestStore_Delete(t *testing.T) {
 	tempDir := t.TempDir()
-	credPath := filepath.Join(tempDir, "host-credentials.json")
+	credPath := filepath.Join(tempDir, "broker-credentials.json")
 	store := NewStore(credPath)
 
 	// Create file
@@ -137,7 +137,7 @@ func TestStore_LoadNotFound(t *testing.T) {
 
 func TestStore_GetSecretKey(t *testing.T) {
 	tempDir := t.TempDir()
-	credPath := filepath.Join(tempDir, "host-credentials.json")
+	credPath := filepath.Join(tempDir, "broker-credentials.json")
 	store := NewStore(credPath)
 
 	originalKey := []byte("test-secret-key-32bytes!12345678")
@@ -160,7 +160,7 @@ func TestStore_GetSecretKey(t *testing.T) {
 
 func TestStore_SaveValidation(t *testing.T) {
 	tempDir := t.TempDir()
-	credPath := filepath.Join(tempDir, "host-credentials.json")
+	credPath := filepath.Join(tempDir, "broker-credentials.json")
 	store := NewStore(credPath)
 
 	tests := []struct {
@@ -214,7 +214,7 @@ func TestStore_SaveValidation(t *testing.T) {
 
 func TestStore_LoadValidation(t *testing.T) {
 	tempDir := t.TempDir()
-	credPath := filepath.Join(tempDir, "host-credentials.json")
+	credPath := filepath.Join(tempDir, "broker-credentials.json")
 
 	tests := []struct {
 		name      string
@@ -233,12 +233,12 @@ func TestStore_LoadValidation(t *testing.T) {
 		},
 		{
 			name:      "missing secretKey",
-			content:   `{"hostId": "test"}`,
+			content:   `{"brokerId": "test"}`,
 			expectErr: true,
 		},
 		{
 			name:      "valid",
-			content:   `{"hostId": "test", "secretKey": "abc"}`,
+			content:   `{"brokerId": "test", "secretKey": "abc"}`,
 			expectErr: false,
 		},
 	}
@@ -265,7 +265,7 @@ func TestStore_LoadValidation(t *testing.T) {
 
 func TestStore_SaveFromJoinResponse(t *testing.T) {
 	tempDir := t.TempDir()
-	credPath := filepath.Join(tempDir, "host-credentials.json")
+	credPath := filepath.Join(tempDir, "broker-credentials.json")
 	store := NewStore(credPath)
 
 	err := store.SaveFromJoinResponse("host-123", "c2VjcmV0", "http://hub.example.com")
@@ -312,7 +312,7 @@ func TestDefaultPath(t *testing.T) {
 
 func TestStore_JSONFormat(t *testing.T) {
 	tempDir := t.TempDir()
-	credPath := filepath.Join(tempDir, "host-credentials.json")
+	credPath := filepath.Join(tempDir, "broker-credentials.json")
 	store := NewStore(credPath)
 
 	creds := &BrokerCredentials{
@@ -331,8 +331,8 @@ func TestStore_JSONFormat(t *testing.T) {
 		t.Fatalf("Failed to parse saved JSON: %v", err)
 	}
 
-	if parsed["hostId"] != "test-host-id" {
-		t.Errorf("hostId mismatch in JSON: %v", parsed["hostId"])
+	if parsed["brokerId"] != "test-host-id" {
+		t.Errorf("hostId mismatch in JSON: %v", parsed["brokerId"])
 	}
 	if parsed["secretKey"] != "dGVzdC1zZWNyZXQ=" {
 		t.Errorf("secretKey mismatch in JSON: %v", parsed["secretKey"])
@@ -344,7 +344,7 @@ func TestStore_JSONFormat(t *testing.T) {
 
 func TestStore_ModTime(t *testing.T) {
 	tempDir := t.TempDir()
-	credPath := filepath.Join(tempDir, "host-credentials.json")
+	credPath := filepath.Join(tempDir, "broker-credentials.json")
 	store := NewStore(credPath)
 
 	// ModTime should return zero for non-existent file
@@ -376,7 +376,7 @@ func TestStore_ModTime(t *testing.T) {
 
 func TestStore_LoadIfChanged(t *testing.T) {
 	tempDir := t.TempDir()
-	credPath := filepath.Join(tempDir, "host-credentials.json")
+	credPath := filepath.Join(tempDir, "broker-credentials.json")
 	store := NewStore(credPath)
 
 	// LoadIfChanged on non-existent file should return nil

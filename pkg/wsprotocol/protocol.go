@@ -66,7 +66,7 @@ type Envelope struct {
 // ConnectMessage is sent by Runtime Host when establishing control channel.
 type ConnectMessage struct {
 	Type      string   `json:"type"` // Always "connect"
-	BrokerID string   `json:"hostId"`
+	BrokerID string   `json:"brokerId"`
 	Version   string   `json:"version"`
 	Groves    []string `json:"groves,omitempty"`    // Grove IDs this host serves
 	Timestamp int64    `json:"timestamp,omitempty"` // Unix timestamp
@@ -75,7 +75,7 @@ type ConnectMessage struct {
 // ConnectedMessage is sent by Hub to confirm successful connection.
 type ConnectedMessage struct {
 	Type           string `json:"type"` // Always "connected"
-	BrokerID string `json:"hostId"`
+	BrokerID string `json:"brokerId"`
 	SessionID      string `json:"sessionId"`      // Unique session identifier
 	PingIntervalMs int    `json:"pingIntervalMs"` // Expected ping interval
 }

@@ -475,7 +475,7 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 		if brokerID == "" {
 			// Generate new UUID and persist it
 			brokerID = api.NewUUID()
-			if err := config.UpdateSetting(globalDir, "hub.hostId", brokerID, true); err != nil {
+			if err := config.UpdateSetting(globalDir, "hub.brokerId", brokerID, true); err != nil {
 				log.Printf("Warning: failed to persist host ID to settings: %v", err)
 			} else {
 				log.Printf("Generated and persisted new host ID: %s", brokerID)
