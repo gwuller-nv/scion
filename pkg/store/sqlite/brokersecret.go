@@ -33,8 +33,8 @@ func (s *SQLiteStore) CreateBrokerSecret(ctx context.Context, secret *store.Brok
 	}
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO host_secrets (
-			host_id, secret_key, algorithm,
+		INSERT INTO broker_secrets (
+			broker_id, secret_key, algorithm,
 			created_at, rotated_at, expires_at, status
 		) VALUES (?, ?, ?, ?, ?, ?, ?)
 	`,
@@ -57,9 +57,9 @@ func (s *SQLiteStore) GetBrokerSecret(ctx context.Context, brokerID string) (*st
 	var rotatedAt, expiresAt sql.NullTime
 
 	err := s.db.QueryRowContext(ctx, `
-		SELECT host_id, secret_key, algorithm,
+		SELECT broker_id, secret_key, algorithm,
 			created_at, rotated_at, expires_at, status
-		FROM host_secrets WHERE host_id = ?
+		FROM broker_secrets WHERE broker_id = ?
 	`, brokerID).Scan(
 		&secret.BrokerID, &secret.SecretKey, &secret.Algorithm,
 		&secret.CreatedAt, &rotatedAt, &expiresAt, &secret.Status,
@@ -85,10 +85,10 @@ func (s *SQLiteStore) GetBrokerSecret(ctx context.Context, brokerID string) (*st
 // This supports dual-secret validation during rotation grace periods.
 func (s *SQLiteStore) GetActiveSecrets(ctx context.Context, brokerID string) ([]*store.BrokerSecret, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT host_id, secret_key, algorithm,
+		SELECT broker_id, secret_key, algorithm,
 			created_at, rotated_at, expires_at, status
-		FROM host_secrets
-		WHERE host_id = ? AND status IN (?, ?)
+		FROM broker_secrets
+		WHERE broker_id = ? AND status IN (?, ?)
 		ORDER BY created_at DESC
 	`, brokerID, store.BrokerSecretStatusActive, store.BrokerSecretStatusDeprecated)
 	if err != nil {
@@ -128,13 +128,13 @@ func (s *SQLiteStore) GetActiveSecrets(ctx context.Context, brokerID string) ([]
 // UpdateBrokerSecret updates an existing host secret.
 func (s *SQLiteStore) UpdateBrokerSecret(ctx context.Context, secret *store.BrokerSecret) error {
 	result, err := s.db.ExecContext(ctx, `
-		UPDATE host_secrets SET
+		UPDATE broker_secrets SET
 			secret_key = ?,
 			algorithm = ?,
 			rotated_at = ?,
 			expires_at = ?,
 			status = ?
-		WHERE host_id = ?
+		WHERE broker_id = ?
 	`,
 		secret.SecretKey, secret.Algorithm,
 		nullableTime(secret.RotatedAt), nullableTime(secret.ExpiresAt), secret.Status,
@@ -157,7 +157,7 @@ func (s *SQLiteStore) UpdateBrokerSecret(ctx context.Context, secret *store.Brok
 // DeleteBrokerSecret removes a host secret.
 func (s *SQLiteStore) DeleteBrokerSecret(ctx context.Context, brokerID string) error {
 	result, err := s.db.ExecContext(ctx, `
-		DELETE FROM host_secrets WHERE host_id = ?
+		DELETE FROM broker_secrets WHERE broker_id = ?
 	`, brokerID)
 	if err != nil {
 		return err
@@ -189,8 +189,8 @@ func (s *SQLiteStore) CreateJoinToken(ctx context.Context, token *store.BrokerJo
 	}
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO host_join_tokens (
-			host_id, token_hash, expires_at, created_at, created_by
+		INSERT INTO broker_join_tokens (
+			broker_id, token_hash, expires_at, created_at, created_by
 		) VALUES (?, ?, ?, ?, ?)
 	`,
 		token.BrokerID, token.TokenHash, token.ExpiresAt, token.CreatedAt, token.CreatedBy,
@@ -212,8 +212,8 @@ func (s *SQLiteStore) GetJoinToken(ctx context.Context, tokenHash string) (*stor
 	token := &store.BrokerJoinToken{}
 
 	err := s.db.QueryRowContext(ctx, `
-		SELECT host_id, token_hash, expires_at, created_at, created_by
-		FROM host_join_tokens WHERE token_hash = ?
+		SELECT broker_id, token_hash, expires_at, created_at, created_by
+		FROM broker_join_tokens WHERE token_hash = ?
 	`, tokenHash).Scan(
 		&token.BrokerID, &token.TokenHash, &token.ExpiresAt, &token.CreatedAt, &token.CreatedBy,
 	)
@@ -231,8 +231,8 @@ func (s *SQLiteStore) GetJoinTokenByBrokerID(ctx context.Context, brokerID strin
 	token := &store.BrokerJoinToken{}
 
 	err := s.db.QueryRowContext(ctx, `
-		SELECT host_id, token_hash, expires_at, created_at, created_by
-		FROM host_join_tokens WHERE host_id = ?
+		SELECT broker_id, token_hash, expires_at, created_at, created_by
+		FROM broker_join_tokens WHERE broker_id = ?
 	`, brokerID).Scan(
 		&token.BrokerID, &token.TokenHash, &token.ExpiresAt, &token.CreatedAt, &token.CreatedBy,
 	)
@@ -248,7 +248,7 @@ func (s *SQLiteStore) GetJoinTokenByBrokerID(ctx context.Context, brokerID strin
 // DeleteJoinToken removes a join token by host ID.
 func (s *SQLiteStore) DeleteJoinToken(ctx context.Context, brokerID string) error {
 	result, err := s.db.ExecContext(ctx, `
-		DELETE FROM host_join_tokens WHERE host_id = ?
+		DELETE FROM broker_join_tokens WHERE broker_id = ?
 	`, brokerID)
 	if err != nil {
 		return err
@@ -267,7 +267,7 @@ func (s *SQLiteStore) DeleteJoinToken(ctx context.Context, brokerID string) erro
 // CleanExpiredJoinTokens removes all expired join tokens.
 func (s *SQLiteStore) CleanExpiredJoinTokens(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `
-		DELETE FROM host_join_tokens WHERE expires_at < ?
+		DELETE FROM broker_join_tokens WHERE expires_at < ?
 	`, time.Now())
 	return err
 }

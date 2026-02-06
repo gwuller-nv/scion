@@ -74,7 +74,7 @@ func (l *LogAuditLogger) LogHostAuthEvent(ctx context.Context, event *HostAuthEv
 	attrs := []slog.Attr{
 		slog.String("event_type", string(event.EventType)),
 		slog.Bool("success", event.Success),
-		slog.String("host_id", event.BrokerID),
+		slog.String("broker_id", event.BrokerID),
 		slog.String("ip_address", event.IPAddress),
 	}
 

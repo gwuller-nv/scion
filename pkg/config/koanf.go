@@ -77,7 +77,7 @@ func LoadSettingsKoanf(grovePath string) (*Settings, error) {
 			switch subkey {
 			case "api_key":
 				return "hub.apiKey"
-			case "host_id":
+			case "broker_id":
 				return "hub.hostId"
 			case "host_token":
 				return "hub.brokerToken"

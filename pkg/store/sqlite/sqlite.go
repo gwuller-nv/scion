@@ -130,7 +130,7 @@ CREATE INDEX IF NOT EXISTS idx_groves_git_remote ON groves(git_remote);
 CREATE INDEX IF NOT EXISTS idx_groves_owner ON groves(owner_id);
 
 -- Runtime hosts table
-CREATE TABLE IF NOT EXISTS runtime_hosts (
+CREATE TABLE IF NOT EXISTS runtime_brokers (
 	id TEXT PRIMARY KEY,
 	name TEXT NOT NULL,
 	slug TEXT NOT NULL,
@@ -150,21 +150,21 @@ CREATE TABLE IF NOT EXISTS runtime_hosts (
 	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_runtime_hosts_slug ON runtime_hosts(slug);
-CREATE INDEX IF NOT EXISTS idx_runtime_hosts_status ON runtime_hosts(status);
+CREATE INDEX IF NOT EXISTS idx_runtime_brokers_slug ON runtime_brokers(slug);
+CREATE INDEX IF NOT EXISTS idx_runtime_brokers_status ON runtime_brokers(status);
 
 -- Grove contributors (many-to-many relationship)
 CREATE TABLE IF NOT EXISTS grove_contributors (
 	grove_id TEXT NOT NULL,
-	host_id TEXT NOT NULL,
-	host_name TEXT NOT NULL,
+	broker_id TEXT NOT NULL,
+	broker_name TEXT NOT NULL,
 	mode TEXT NOT NULL DEFAULT 'connected',
 	status TEXT NOT NULL DEFAULT 'offline',
 	profiles TEXT,
 	last_seen TIMESTAMP,
-	PRIMARY KEY (grove_id, host_id),
+	PRIMARY KEY (grove_id, broker_id),
 	FOREIGN KEY (grove_id) REFERENCES groves(id) ON DELETE CASCADE,
-	FOREIGN KEY (host_id) REFERENCES runtime_hosts(id) ON DELETE CASCADE
+	FOREIGN KEY (broker_id) REFERENCES runtime_brokers(id) ON DELETE CASCADE
 );
 
 -- Agents table
@@ -196,12 +196,12 @@ CREATE TABLE IF NOT EXISTS agents (
 	visibility TEXT NOT NULL DEFAULT 'private',
 	state_version INTEGER NOT NULL DEFAULT 1,
 	FOREIGN KEY (grove_id) REFERENCES groves(id) ON DELETE CASCADE,
-	FOREIGN KEY (runtime_broker_id) REFERENCES runtime_hosts(id) ON DELETE SET NULL
+	FOREIGN KEY (runtime_broker_id) REFERENCES runtime_brokers(id) ON DELETE SET NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_grove_slug ON agents(grove_id, agent_id);
 CREATE INDEX IF NOT EXISTS idx_agents_grove ON agents(grove_id);
 CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
-CREATE INDEX IF NOT EXISTS idx_agents_runtime_host ON agents(runtime_broker_id);
+CREATE INDEX IF NOT EXISTS idx_agents_runtime_broker ON agents(runtime_broker_id);
 
 -- Templates table
 CREATE TABLE IF NOT EXISTS templates (
@@ -241,8 +241,8 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 // Migration V2: Add default_runtime_broker_id to groves
 const migrationV2 = `
 -- Add default runtime host to groves
-ALTER TABLE groves ADD COLUMN default_runtime_broker_id TEXT REFERENCES runtime_hosts(id) ON DELETE SET NULL;
-CREATE INDEX IF NOT EXISTS idx_groves_default_runtime_host ON groves(default_runtime_broker_id);
+ALTER TABLE groves ADD COLUMN default_runtime_broker_id TEXT REFERENCES runtime_brokers(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_groves_default_runtime_broker ON groves(default_runtime_broker_id);
 `
 
 // Migration V3: Add local_path to grove_contributors
@@ -406,28 +406,28 @@ ALTER TABLE agents ADD COLUMN message TEXT;
 // Migration V9: Host secrets and join tokens for Runtime Host authentication
 const migrationV9 = `
 -- Host secrets table for HMAC-based authentication
-CREATE TABLE IF NOT EXISTS host_secrets (
-    host_id TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS broker_secrets (
+    broker_id TEXT PRIMARY KEY,
     secret_key BLOB NOT NULL,
     algorithm TEXT NOT NULL DEFAULT 'hmac-sha256',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     rotated_at TIMESTAMP,
     expires_at TIMESTAMP,
     status TEXT NOT NULL DEFAULT 'active',
-    FOREIGN KEY (host_id) REFERENCES runtime_hosts(id) ON DELETE CASCADE
+    FOREIGN KEY (broker_id) REFERENCES runtime_brokers(id) ON DELETE CASCADE
 );
 
 -- Host join tokens table for registration bootstrap
-CREATE TABLE IF NOT EXISTS host_join_tokens (
-    host_id TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS broker_join_tokens (
+    broker_id TEXT PRIMARY KEY,
     token_hash TEXT NOT NULL UNIQUE,
     expires_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by TEXT NOT NULL,
-    FOREIGN KEY (host_id) REFERENCES runtime_hosts(id) ON DELETE CASCADE
+    FOREIGN KEY (broker_id) REFERENCES runtime_brokers(id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS idx_host_join_tokens_hash ON host_join_tokens(token_hash);
-CREATE INDEX IF NOT EXISTS idx_host_join_tokens_expires ON host_join_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_broker_join_tokens_hash ON broker_join_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_broker_join_tokens_expires ON broker_join_tokens(expires_at);
 `
 
 // Helper functions for JSON marshaling/unmarshaling
@@ -962,7 +962,7 @@ func (s *SQLiteStore) ListGroves(ctx context.Context, filter store.GroveFilter, 
 		args = append(args, filter.GitRemotePrefix+"%")
 	}
 	if filter.BrokerID != "" {
-		conditions = append(conditions, "id IN (SELECT grove_id FROM grove_contributors WHERE host_id = ?)")
+		conditions = append(conditions, "id IN (SELECT grove_id FROM grove_contributors WHERE broker_id = ?)")
 		args = append(args, filter.BrokerID)
 	}
 	if filter.Name != "" {
@@ -1044,7 +1044,7 @@ func (s *SQLiteStore) CreateRuntimeBroker(ctx context.Context, broker *store.Run
 	broker.Updated = now
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO runtime_hosts (
+		INSERT INTO runtime_brokers (
 			id, name, slug, type, mode, version,
 			status, connection_state, last_heartbeat,
 			capabilities, supported_harnesses, resources, runtimes,
@@ -1080,7 +1080,7 @@ func (s *SQLiteStore) GetRuntimeBroker(ctx context.Context, id string) (*store.R
 			capabilities, supported_harnesses, resources, runtimes,
 			labels, annotations, endpoint,
 			created_at, updated_at
-		FROM runtime_hosts WHERE id = ?
+		FROM runtime_brokers WHERE id = ?
 	`, id).Scan(
 		&broker.ID, &broker.Name, &broker.Slug, &hostType, &broker.Mode, &broker.Version,
 		&broker.Status, &broker.ConnectionState, &lastHeartbeat,
@@ -1108,7 +1108,7 @@ func (s *SQLiteStore) GetRuntimeBroker(ctx context.Context, id string) (*store.R
 
 func (s *SQLiteStore) GetRuntimeBrokerByName(ctx context.Context, name string) (*store.RuntimeBroker, error) {
 	var id string
-	err := s.db.QueryRowContext(ctx, "SELECT id FROM runtime_hosts WHERE LOWER(name) = LOWER(?)", name).Scan(&id)
+	err := s.db.QueryRowContext(ctx, "SELECT id FROM runtime_brokers WHERE LOWER(name) = LOWER(?)", name).Scan(&id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, store.ErrNotFound
@@ -1122,7 +1122,7 @@ func (s *SQLiteStore) UpdateRuntimeBroker(ctx context.Context, broker *store.Run
 	broker.Updated = time.Now()
 
 	result, err := s.db.ExecContext(ctx, `
-		UPDATE runtime_hosts SET
+		UPDATE runtime_brokers SET
 			name = ?, slug = ?, type = ?, mode = ?, version = ?,
 			status = ?, connection_state = ?, last_heartbeat = ?,
 			capabilities = ?, supported_harnesses = ?, resources = ?, runtimes = ?,
@@ -1153,7 +1153,7 @@ func (s *SQLiteStore) UpdateRuntimeBroker(ctx context.Context, broker *store.Run
 }
 
 func (s *SQLiteStore) DeleteRuntimeBroker(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx, "DELETE FROM runtime_hosts WHERE id = ?", id)
+	result, err := s.db.ExecContext(ctx, "DELETE FROM runtime_brokers WHERE id = ?", id)
 	if err != nil {
 		return err
 	}
@@ -1180,7 +1180,7 @@ func (s *SQLiteStore) ListRuntimeBrokers(ctx context.Context, filter store.Runti
 		args = append(args, filter.Mode)
 	}
 	if filter.GroveID != "" {
-		conditions = append(conditions, "id IN (SELECT host_id FROM grove_contributors WHERE grove_id = ?)")
+		conditions = append(conditions, "id IN (SELECT broker_id FROM grove_contributors WHERE grove_id = ?)")
 		args = append(args, filter.GroveID)
 	}
 
@@ -1190,7 +1190,7 @@ func (s *SQLiteStore) ListRuntimeBrokers(ctx context.Context, filter store.Runti
 	}
 
 	var totalCount int
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM runtime_hosts %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM runtime_brokers %s", whereClause)
 	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalCount); err != nil {
 		return nil, err
 	}
@@ -1206,7 +1206,7 @@ func (s *SQLiteStore) ListRuntimeBrokers(ctx context.Context, filter store.Runti
 			capabilities, supported_harnesses, resources, runtimes,
 			labels, annotations, endpoint,
 			created_at, updated_at
-		FROM runtime_hosts %s ORDER BY created_at DESC LIMIT ?
+		FROM runtime_brokers %s ORDER BY created_at DESC LIMIT ?
 	`, whereClause)
 	args = append(args, limit)
 
@@ -1254,7 +1254,7 @@ func (s *SQLiteStore) UpdateRuntimeBrokerHeartbeat(ctx context.Context, id strin
 	now := time.Now()
 
 	result, err := s.db.ExecContext(ctx, `
-		UPDATE runtime_hosts SET
+		UPDATE runtime_brokers SET
 			status = ?,
 			last_heartbeat = ?,
 			updated_at = ?
@@ -1785,7 +1785,7 @@ func (s *SQLiteStore) ListUsers(ctx context.Context, filter store.UserFilter, op
 
 func (s *SQLiteStore) AddGroveContributor(ctx context.Context, contrib *store.GroveContributor) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO grove_contributors (grove_id, host_id, host_name, local_path, mode, status, profiles, last_seen)
+		INSERT OR REPLACE INTO grove_contributors (grove_id, broker_id, broker_name, local_path, mode, status, profiles, last_seen)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		contrib.GroveID, contrib.BrokerID, contrib.BrokerName, contrib.LocalPath, contrib.Mode, contrib.Status,
@@ -1795,7 +1795,7 @@ func (s *SQLiteStore) AddGroveContributor(ctx context.Context, contrib *store.Gr
 }
 
 func (s *SQLiteStore) RemoveGroveContributor(ctx context.Context, groveID, brokerID string) error {
-	result, err := s.db.ExecContext(ctx, "DELETE FROM grove_contributors WHERE grove_id = ? AND host_id = ?", groveID, brokerID)
+	result, err := s.db.ExecContext(ctx, "DELETE FROM grove_contributors WHERE grove_id = ? AND broker_id = ?", groveID, brokerID)
 	if err != nil {
 		return err
 	}
@@ -1816,8 +1816,8 @@ func (s *SQLiteStore) GetGroveContributor(ctx context.Context, groveID, brokerID
 	var lastSeen sql.NullTime
 
 	err := s.db.QueryRowContext(ctx, `
-		SELECT grove_id, host_id, host_name, local_path, mode, status, profiles, last_seen
-		FROM grove_contributors WHERE grove_id = ? AND host_id = ?
+		SELECT grove_id, broker_id, broker_name, local_path, mode, status, profiles, last_seen
+		FROM grove_contributors WHERE grove_id = ? AND broker_id = ?
 	`, groveID, brokerID).Scan(
 		&contrib.GroveID, &contrib.BrokerID, &contrib.BrokerName, &localPath, &contrib.Mode, &contrib.Status,
 		&profiles, &lastSeen,
@@ -1842,7 +1842,7 @@ func (s *SQLiteStore) GetGroveContributor(ctx context.Context, groveID, brokerID
 
 func (s *SQLiteStore) GetGroveContributors(ctx context.Context, groveID string) ([]store.GroveContributor, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT grove_id, host_id, host_name, local_path, mode, status, profiles, last_seen
+		SELECT grove_id, broker_id, broker_name, local_path, mode, status, profiles, last_seen
 		FROM grove_contributors WHERE grove_id = ?
 	`, groveID)
 	if err != nil {
@@ -1880,8 +1880,8 @@ func (s *SQLiteStore) GetGroveContributors(ctx context.Context, groveID string) 
 
 func (s *SQLiteStore) GetHostGroves(ctx context.Context, brokerID string) ([]store.GroveContributor, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT grove_id, host_id, host_name, local_path, mode, status, profiles, last_seen
-		FROM grove_contributors WHERE host_id = ?
+		SELECT grove_id, broker_id, broker_name, local_path, mode, status, profiles, last_seen
+		FROM grove_contributors WHERE broker_id = ?
 	`, brokerID)
 	if err != nil {
 		return nil, err
@@ -1920,7 +1920,7 @@ func (s *SQLiteStore) UpdateContributorStatus(ctx context.Context, groveID, brok
 	now := time.Now()
 
 	result, err := s.db.ExecContext(ctx, `
-		UPDATE grove_contributors SET status = ?, last_seen = ? WHERE grove_id = ? AND host_id = ?
+		UPDATE grove_contributors SET status = ?, last_seen = ? WHERE grove_id = ? AND broker_id = ?
 	`, status, now, groveID, brokerID)
 	if err != nil {
 		return err
