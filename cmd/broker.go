@@ -32,7 +32,8 @@ var (
 	brokerStartAutoProvide bool
 
 	// broker provide/withdraw flags
-	brokerGroveID string
+	brokerGroveID   string
+	brokerBrokerID  string // --broker flag for remote broker operations
 )
 
 // brokerCmd represents the broker command group
@@ -131,43 +132,51 @@ Examples:
 // brokerProvideCmd adds this broker as a provider for a grove
 var brokerProvideCmd = &cobra.Command{
 	Use:   "provide",
-	Short: "Add this broker as a provider for a grove",
-	Long: `Add this broker as a provider for a grove.
+	Short: "Add a broker as a provider for a grove",
+	Long: `Add a broker as a provider for a grove.
 
 When a broker is a provider for a grove, it can execute agents
-for that grove. The Hub will dispatch agent operations to this
+for that grove. The Hub will dispatch agent operations to the
 broker when agents are created in the grove.
 
 If --grove is not specified, uses the current local grove.
+If --broker is not specified, uses the local broker registration.
 
 Examples:
-  # Add as provider for current grove
+  # Add local broker as provider for current grove
   scion broker provide
 
-  # Add as provider for a specific grove
-  scion broker provide --grove <grove-id>`,
+  # Add local broker as provider for a specific grove
+  scion broker provide --grove <grove-id>
+
+  # Add a remote broker as provider for a grove (admin only)
+  scion broker provide --broker <broker-id> --grove <grove-id>`,
 	RunE: runBrokerProvide,
 }
 
 // brokerWithdrawCmd removes this broker as a provider from a grove
 var brokerWithdrawCmd = &cobra.Command{
 	Use:   "withdraw",
-	Short: "Remove this broker as a provider from a grove",
-	Long: `Remove this broker as a provider from a grove.
+	Short: "Remove a broker as a provider from a grove",
+	Long: `Remove a broker as a provider from a grove.
 
-After withdrawing, this broker will no longer receive agent dispatch
-requests for the grove. Existing agents on this broker will continue
+After withdrawing, the broker will no longer receive agent dispatch
+requests for the grove. Existing agents on the broker will continue
 running but cannot be managed through the Hub until the broker is
 re-added as a provider.
 
 If --grove is not specified, uses the current local grove.
+If --broker is not specified, uses the local broker registration.
 
 Examples:
-  # Remove as provider from current grove
+  # Remove local broker as provider from current grove
   scion broker withdraw
 
-  # Remove as provider from a specific grove
-  scion broker withdraw --grove <grove-id>`,
+  # Remove local broker as provider from a specific grove
+  scion broker withdraw --grove <grove-id>
+
+  # Remove a remote broker as provider from a grove (admin only)
+  scion broker withdraw --broker <broker-id> --grove <grove-id>`,
 	RunE: runBrokerWithdraw,
 }
 
@@ -236,7 +245,9 @@ func init() {
 
 	// Provide/withdraw flags
 	brokerProvideCmd.Flags().StringVar(&brokerGroveID, "grove", "", "Grove ID to add as provider for")
+	brokerProvideCmd.Flags().StringVar(&brokerBrokerID, "broker", "", "Broker ID to use (for remote broker operations)")
 	brokerWithdrawCmd.Flags().StringVar(&brokerGroveID, "grove", "", "Grove ID to remove as provider from")
+	brokerWithdrawCmd.Flags().StringVar(&brokerBrokerID, "broker", "", "Broker ID to use (for remote broker operations)")
 }
 
 func runBrokerRegister(cmd *cobra.Command, args []string) error {
@@ -642,31 +653,39 @@ func runBrokerStop(cmd *cobra.Command, args []string) error {
 }
 
 func runBrokerProvide(cmd *cobra.Command, args []string) error {
-	// Get broker ID
-	credStore := brokercredentials.NewStore("")
-	creds, credErr := credStore.Load()
-
-	globalDir, globalErr := config.GetGlobalDir()
 	var brokerID string
 	var brokerName string
+	isRemoteBroker := brokerBrokerID != ""
 
-	if credErr == nil && creds != nil && creds.BrokerID != "" {
-		brokerID = creds.BrokerID
-	} else if globalErr == nil {
-		globalSettings, err := config.LoadSettings(globalDir)
-		if err == nil && globalSettings.Hub != nil && globalSettings.Hub.BrokerID != "" {
-			brokerID = globalSettings.Hub.BrokerID
+	if isRemoteBroker {
+		// Use the broker ID from --broker flag
+		brokerID = brokerBrokerID
+		// Broker name will be fetched from Hub below
+	} else {
+		// Get broker ID from local credentials
+		credStore := brokercredentials.NewStore("")
+		creds, credErr := credStore.Load()
+
+		globalDir, globalErr := config.GetGlobalDir()
+
+		if credErr == nil && creds != nil && creds.BrokerID != "" {
+			brokerID = creds.BrokerID
+		} else if globalErr == nil {
+			globalSettings, err := config.LoadSettings(globalDir)
+			if err == nil && globalSettings.Hub != nil && globalSettings.Hub.BrokerID != "" {
+				brokerID = globalSettings.Hub.BrokerID
+			}
 		}
-	}
 
-	if brokerID == "" {
-		return fmt.Errorf("no broker registration found.\n\nRegister with: scion broker register")
-	}
+		if brokerID == "" {
+			return fmt.Errorf("no broker registration found.\n\nRegister with: scion broker register\nOr specify a broker with --broker <id>")
+		}
 
-	// Get broker name for display
-	brokerName, _ = os.Hostname()
-	if brokerName == "" {
-		brokerName = brokerID[:8]
+		// Get broker name for display
+		brokerName, _ = os.Hostname()
+		if brokerName == "" {
+			brokerName = brokerID[:8]
+		}
 	}
 
 	// Resolve grove ID
@@ -734,6 +753,18 @@ func runBrokerProvide(cmd *cobra.Command, args []string) error {
 		groveName = grove.Name
 	}
 
+	// If we used --broker flag, fetch broker details from Hub
+	if isRemoteBroker {
+		broker, err := client.RuntimeBrokers().Get(ctx, brokerID)
+		if err != nil {
+			return fmt.Errorf("failed to fetch broker '%s': %w", brokerID, err)
+		}
+		brokerName = broker.Name
+		if brokerName == "" {
+			brokerName = brokerID[:8]
+		}
+	}
+
 	// Show confirmation prompt
 	if !hubsync.ShowProvidePrompt(groveName, brokerName, autoConfirm) {
 		return fmt.Errorf("operation cancelled")
@@ -758,31 +789,39 @@ func runBrokerProvide(cmd *cobra.Command, args []string) error {
 }
 
 func runBrokerWithdraw(cmd *cobra.Command, args []string) error {
-	// Get broker ID
-	credStore := brokercredentials.NewStore("")
-	creds, credErr := credStore.Load()
-
-	globalDir, globalErr := config.GetGlobalDir()
 	var brokerID string
 	var brokerName string
+	isRemoteBroker := brokerBrokerID != ""
 
-	if credErr == nil && creds != nil && creds.BrokerID != "" {
-		brokerID = creds.BrokerID
-	} else if globalErr == nil {
-		globalSettings, err := config.LoadSettings(globalDir)
-		if err == nil && globalSettings.Hub != nil && globalSettings.Hub.BrokerID != "" {
-			brokerID = globalSettings.Hub.BrokerID
+	if isRemoteBroker {
+		// Use the broker ID from --broker flag
+		brokerID = brokerBrokerID
+		// Broker name will be fetched from Hub below
+	} else {
+		// Get broker ID from local credentials
+		credStore := brokercredentials.NewStore("")
+		creds, credErr := credStore.Load()
+
+		globalDir, globalErr := config.GetGlobalDir()
+
+		if credErr == nil && creds != nil && creds.BrokerID != "" {
+			brokerID = creds.BrokerID
+		} else if globalErr == nil {
+			globalSettings, err := config.LoadSettings(globalDir)
+			if err == nil && globalSettings.Hub != nil && globalSettings.Hub.BrokerID != "" {
+				brokerID = globalSettings.Hub.BrokerID
+			}
 		}
-	}
 
-	if brokerID == "" {
-		return fmt.Errorf("no broker registration found.\n\nRegister with: scion broker register")
-	}
+		if brokerID == "" {
+			return fmt.Errorf("no broker registration found.\n\nRegister with: scion broker register\nOr specify a broker with --broker <id>")
+		}
 
-	// Get broker name for display
-	brokerName, _ = os.Hostname()
-	if brokerName == "" {
-		brokerName = brokerID[:8]
+		// Get broker name for display
+		brokerName, _ = os.Hostname()
+		if brokerName == "" {
+			brokerName = brokerID[:8]
+		}
 	}
 
 	// Resolve grove ID
@@ -848,6 +887,18 @@ func runBrokerWithdraw(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to fetch grove: %w", err)
 		}
 		groveName = grove.Name
+	}
+
+	// If we used --broker flag, fetch broker details from Hub
+	if isRemoteBroker {
+		broker, err := client.RuntimeBrokers().Get(ctx, brokerID)
+		if err != nil {
+			return fmt.Errorf("failed to fetch broker '%s': %w", brokerID, err)
+		}
+		brokerName = broker.Name
+		if brokerName == "" {
+			brokerName = brokerID[:8]
+		}
 	}
 
 	// Show confirmation prompt
