@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -44,9 +45,11 @@ A Runtime Broker is a compute node that executes agents on behalf of the Hub.
 Brokers register with the Hub and can be added as providers for groves.
 
 Commands:
+  status       Show broker status (server, registration, groves)
+  start        Start the broker server (as daemon by default)
+  stop         Stop the broker daemon
   register     Register this host as a Runtime Broker with the Hub
   deregister   Remove this broker from the Hub
-  start        Start the broker server (as daemon by default)
   provide      Add this broker as a provider for a grove
   withdraw     Remove this broker as a provider from a grove`,
 }
@@ -168,6 +171,44 @@ Examples:
 	RunE: runBrokerWithdraw,
 }
 
+// brokerStatusCmd shows the current broker status
+var brokerStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show Runtime Broker status",
+	Long: `Show the current status of the Runtime Broker.
+
+This command displays:
+- Whether the broker server is running (daemon or foreground)
+- Hub registration status
+- Groves this broker provides for
+- Connection status to the Hub
+
+Examples:
+  # Show broker status
+  scion broker status
+
+  # Show broker status in JSON format
+  scion broker status --json`,
+	RunE: runBrokerStatus,
+}
+
+// brokerStopCmd stops the broker daemon
+var brokerStopCmd = &cobra.Command{
+	Use:   "stop",
+	Short: "Stop the Runtime Broker daemon",
+	Long: `Stop the Runtime Broker daemon.
+
+This command stops the broker server if it's running as a daemon.
+If the broker is running in foreground mode, use Ctrl+C to stop it.
+
+Examples:
+  # Stop the broker daemon
+  scion broker stop`,
+	RunE: runBrokerStop,
+}
+
+var brokerStatusJSON bool
+
 func init() {
 	rootCmd.AddCommand(brokerCmd)
 	brokerCmd.AddCommand(brokerRegisterCmd)
@@ -175,6 +216,11 @@ func init() {
 	brokerCmd.AddCommand(brokerStartCmd)
 	brokerCmd.AddCommand(brokerProvideCmd)
 	brokerCmd.AddCommand(brokerWithdrawCmd)
+	brokerCmd.AddCommand(brokerStatusCmd)
+	brokerCmd.AddCommand(brokerStopCmd)
+
+	// Status flags
+	brokerStatusCmd.Flags().BoolVar(&brokerStatusJSON, "json", false, "Output in JSON format")
 
 	// Register flags
 	brokerRegisterCmd.Flags().BoolVar(&brokerForceRegister, "force", false, "Force re-registration even if already registered")
@@ -555,8 +601,43 @@ func runBrokerStart(cmd *cobra.Command, args []string) error {
 	fmt.Printf("PID file: %s\n", daemon.GetPIDPath(globalDir))
 	fmt.Println()
 	fmt.Println("Use 'scion broker register' to register with the Hub.")
-	fmt.Printf("Use 'kill %d' to stop the broker.\n", pid)
+	fmt.Println("Use 'scion broker stop' to stop the daemon.")
 
+	return nil
+}
+
+func runBrokerStop(cmd *cobra.Command, args []string) error {
+	// Get global directory for daemon files
+	globalDir, err := config.GetGlobalDir()
+	if err != nil {
+		return fmt.Errorf("failed to get global directory: %w", err)
+	}
+
+	// Check if daemon is running
+	running, pid, _ := daemon.Status(globalDir)
+	if !running {
+		// Check if server is running on the port (might be foreground)
+		health, err := checkLocalBrokerServer(DefaultBrokerPort)
+		if err == nil {
+			return fmt.Errorf("broker server is running (status: %s) but not as a daemon.\n\nIf running in foreground, use Ctrl+C to stop it.", health.Status)
+		}
+		return fmt.Errorf("broker daemon is not running")
+	}
+
+	fmt.Printf("Stopping broker daemon (PID: %d)...\n", pid)
+
+	if err := daemon.Stop(globalDir); err != nil {
+		return fmt.Errorf("failed to stop daemon: %w", err)
+	}
+
+	// Verify it stopped
+	time.Sleep(500 * time.Millisecond)
+	running, _, _ = daemon.Status(globalDir)
+	if running {
+		return fmt.Errorf("daemon may still be running. Check with 'scion broker status'")
+	}
+
+	fmt.Println("Broker daemon stopped.")
 	return nil
 }
 
@@ -783,4 +864,210 @@ func runBrokerWithdraw(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Broker '%s' removed as provider from grove '%s'\n", brokerName, groveName)
 
 	return nil
+}
+
+func runBrokerStatus(cmd *cobra.Command, args []string) error {
+	// Get global directory for daemon files
+	globalDir, err := config.GetGlobalDir()
+	if err != nil {
+		return fmt.Errorf("failed to get global directory: %w", err)
+	}
+
+	// Collect status information
+	status := brokerStatusInfo{}
+
+	// Check daemon status
+	running, pid, _ := daemon.Status(globalDir)
+	status.DaemonRunning = running
+	status.DaemonPID = pid
+	if running {
+		status.LogFile = daemon.GetLogPath(globalDir)
+		status.PIDFile = daemon.GetPIDPath(globalDir)
+	}
+
+	// Check if broker server is responding (could be foreground or daemon)
+	health, err := checkLocalBrokerServer(DefaultBrokerPort)
+	if err == nil {
+		status.ServerRunning = true
+		status.ServerPort = DefaultBrokerPort
+		status.ServerStatus = health.Status
+		status.ServerVersion = health.Version
+	}
+
+	// Get broker credentials
+	credStore := brokercredentials.NewStore("")
+	creds, credErr := credStore.Load()
+
+	if credErr == nil && creds != nil && creds.BrokerID != "" {
+		status.BrokerID = creds.BrokerID
+		status.HubEndpoint = creds.HubEndpoint
+		status.Registered = true
+		status.CredentialsPath = credStore.Path()
+	} else {
+		// Check global settings for broker ID
+		globalSettings, err := config.LoadSettings(globalDir)
+		if err == nil && globalSettings.Hub != nil && globalSettings.Hub.BrokerID != "" {
+			status.BrokerID = globalSettings.Hub.BrokerID
+			status.HubEndpoint = globalSettings.Hub.Endpoint
+			status.Registered = true
+		}
+	}
+
+	// Get broker name
+	status.Hostname, _ = os.Hostname()
+
+	// If registered, try to get Hub status and grove list
+	if status.Registered && status.HubEndpoint != "" {
+		resolvedPath, _, _ := config.ResolveGrovePath(grovePath)
+		settings, err := config.LoadSettings(resolvedPath)
+		if err == nil {
+			client, err := getHubClient(settings)
+			if err == nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
+				// Check Hub connectivity
+				hubHealth, err := client.Health(ctx)
+				if err == nil {
+					status.HubConnected = true
+					status.HubStatus = hubHealth.Status
+					status.HubVersion = hubHealth.Version
+				}
+
+				// Get broker info from Hub
+				if status.BrokerID != "" {
+					broker, err := client.RuntimeBrokers().Get(ctx, status.BrokerID)
+					if err == nil {
+						status.BrokerName = broker.Name
+						status.BrokerStatus = broker.Status
+						status.LastHeartbeat = broker.LastHeartbeat
+					}
+
+					// Get groves this broker provides for
+					grovesResp, err := client.RuntimeBrokers().ListGroves(ctx, status.BrokerID)
+					if err == nil && grovesResp != nil {
+						for _, g := range grovesResp.Groves {
+							status.Groves = append(status.Groves, brokerGroveStatus{
+								ID:   g.GroveID,
+								Name: g.GroveName,
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Output
+	if brokerStatusJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(status)
+	}
+
+	// Text output
+	fmt.Println("Runtime Broker Status")
+	fmt.Println("=====================")
+	fmt.Println()
+
+	// Server status
+	fmt.Println("Server")
+	fmt.Println("------")
+	if status.ServerRunning {
+		fmt.Printf("  Running:     yes (port %d)\n", status.ServerPort)
+		fmt.Printf("  Status:      %s\n", status.ServerStatus)
+		fmt.Printf("  Version:     %s\n", status.ServerVersion)
+	} else {
+		fmt.Printf("  Running:     no\n")
+	}
+
+	if status.DaemonRunning {
+		fmt.Printf("  Daemon PID:  %d\n", status.DaemonPID)
+		fmt.Printf("  Log file:    %s\n", status.LogFile)
+	} else if status.ServerRunning {
+		fmt.Printf("  Mode:        foreground (or external)\n")
+	}
+	fmt.Println()
+
+	// Registration status
+	fmt.Println("Hub Registration")
+	fmt.Println("----------------")
+	if status.Registered {
+		fmt.Printf("  Registered:  yes\n")
+		fmt.Printf("  Broker ID:   %s\n", status.BrokerID)
+		if status.BrokerName != "" {
+			fmt.Printf("  Broker Name: %s\n", status.BrokerName)
+		}
+		fmt.Printf("  Hub:         %s\n", status.HubEndpoint)
+		if status.HubConnected {
+			fmt.Printf("  Connected:   yes (%s)\n", status.HubStatus)
+			if status.BrokerStatus != "" {
+				fmt.Printf("  Status:      %s\n", status.BrokerStatus)
+			}
+			if !status.LastHeartbeat.IsZero() {
+				fmt.Printf("  Last seen:   %s\n", formatRelativeTime(status.LastHeartbeat))
+			}
+		} else {
+			fmt.Printf("  Connected:   no (Hub unreachable)\n")
+		}
+	} else {
+		fmt.Printf("  Registered:  no\n")
+		fmt.Printf("\n  Run 'scion broker register' to register with the Hub.\n")
+	}
+	fmt.Println()
+
+	// Groves
+	if len(status.Groves) > 0 {
+		fmt.Println("Groves (Provider)")
+		fmt.Println("-----------------")
+		for _, g := range status.Groves {
+			fmt.Printf("  - %s (ID: %s)\n", g.Name, g.ID)
+		}
+	} else if status.Registered {
+		fmt.Println("Groves (Provider)")
+		fmt.Println("-----------------")
+		fmt.Printf("  (none)\n")
+		fmt.Printf("\n  Run 'scion broker provide' to add this broker as a provider for a grove.\n")
+	}
+
+	return nil
+}
+
+// brokerStatusInfo holds the status information for JSON output
+type brokerStatusInfo struct {
+	// Server status
+	ServerRunning bool   `json:"serverRunning"`
+	ServerPort    int    `json:"serverPort,omitempty"`
+	ServerStatus  string `json:"serverStatus,omitempty"`
+	ServerVersion string `json:"serverVersion,omitempty"`
+
+	// Daemon status
+	DaemonRunning bool   `json:"daemonRunning"`
+	DaemonPID     int    `json:"daemonPid,omitempty"`
+	LogFile       string `json:"logFile,omitempty"`
+	PIDFile       string `json:"pidFile,omitempty"`
+
+	// Registration status
+	Registered      bool   `json:"registered"`
+	BrokerID        string `json:"brokerId,omitempty"`
+	BrokerName      string `json:"brokerName,omitempty"`
+	BrokerStatus    string `json:"brokerStatus,omitempty"`
+	Hostname        string `json:"hostname,omitempty"`
+	CredentialsPath string `json:"credentialsPath,omitempty"`
+
+	// Hub connection
+	HubEndpoint   string    `json:"hubEndpoint,omitempty"`
+	HubConnected  bool      `json:"hubConnected"`
+	HubStatus     string    `json:"hubStatus,omitempty"`
+	HubVersion    string    `json:"hubVersion,omitempty"`
+	LastHeartbeat time.Time `json:"lastHeartbeat,omitempty"`
+
+	// Groves
+	Groves []brokerGroveStatus `json:"groves,omitempty"`
+}
+
+// brokerGroveStatus holds grove info for status output
+type brokerGroveStatus struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
