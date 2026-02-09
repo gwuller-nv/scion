@@ -67,6 +67,12 @@ export default defineConfig({
 					autogenerate: { directory: 'reference' },
 				},
 				{
+					label: 'Development',
+					items: [
+						{ label: 'Local Logging', slug: 'development/logging' },
+					],
+				},
+				{
 					label: 'Contributing',
 					autogenerate: { directory: 'contributing' },
 				},
