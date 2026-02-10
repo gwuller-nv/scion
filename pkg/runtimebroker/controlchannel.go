@@ -584,6 +584,9 @@ func (c *ControlChannelClient) handlePTYStream(handler *StreamHandler, cols, row
 	c.handlePTYStreamWithAgent(handler, cols, rows, containerID, runtimeCmd)
 
 	slog.Info("PTY stream ended via control channel", "slug", handler.slug)
+
+	// Notify the Hub that the stream is closed so it can close the client websocket
+	c.CloseStream(handler.streamID, "session ended", 0)
 }
 
 // SendStreamData sends data on a stream.
