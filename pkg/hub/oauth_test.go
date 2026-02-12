@@ -55,6 +55,18 @@ func TestOAuthConfig_IsConfigured(t *testing.T) {
 			expected: true,
 		},
 		{
+			name: "device google configured",
+			config: OAuthConfig{
+				Device: OAuthClientConfig{
+					Google: OAuthProviderConfig{
+						ClientID:     "device-google-client-id",
+						ClientSecret: "device-google-secret",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
 			name: "both web and cli configured",
 			config: OAuthConfig{
 				Web: OAuthClientConfig{
@@ -97,6 +109,12 @@ func TestOAuthConfig_IsProviderConfigured(t *testing.T) {
 				// Missing secret
 			},
 		},
+		Device: OAuthClientConfig{
+			GitHub: OAuthProviderConfig{
+				ClientID:     "device-github-id",
+				ClientSecret: "device-github-secret",
+			},
+		},
 	}
 
 	tests := []struct {
@@ -104,7 +122,7 @@ func TestOAuthConfig_IsProviderConfigured(t *testing.T) {
 		expected bool
 	}{
 		{"google", true},  // configured in web
-		{"github", false}, // missing secret in cli
+		{"github", true},  // configured in device (cli missing secret)
 		{"unknown", false},
 	}
 
@@ -200,20 +218,24 @@ func TestOAuthService_NotConfigured(t *testing.T) {
 
 func TestOAuthConfig_ClientTypeConfigs(t *testing.T) {
 	tests := []struct {
-		name          string
-		config        OAuthConfig
-		webConfigured bool
-		cliConfigured bool
-		webGoogleID   string
-		cliGoogleID   string
+		name             string
+		config           OAuthConfig
+		webConfigured    bool
+		cliConfigured    bool
+		deviceConfigured bool
+		webGoogleID      string
+		cliGoogleID      string
+		deviceGoogleID   string
 	}{
 		{
-			name:          "empty config",
-			config:        OAuthConfig{},
-			webConfigured: false,
-			cliConfigured: false,
-			webGoogleID:   "",
-			cliGoogleID:   "",
+			name:             "empty config",
+			config:           OAuthConfig{},
+			webConfigured:    false,
+			cliConfigured:    false,
+			deviceConfigured: false,
+			webGoogleID:      "",
+			cliGoogleID:      "",
+			deviceGoogleID:   "",
 		},
 		{
 			name: "web-specific config only",
@@ -225,10 +247,12 @@ func TestOAuthConfig_ClientTypeConfigs(t *testing.T) {
 					},
 				},
 			},
-			webConfigured: true,
-			cliConfigured: false,
-			webGoogleID:   "web-google-id",
-			cliGoogleID:   "",
+			webConfigured:    true,
+			cliConfigured:    false,
+			deviceConfigured: false,
+			webGoogleID:      "web-google-id",
+			cliGoogleID:      "",
+			deviceGoogleID:   "",
 		},
 		{
 			name: "cli-specific config only",
@@ -240,13 +264,32 @@ func TestOAuthConfig_ClientTypeConfigs(t *testing.T) {
 					},
 				},
 			},
-			webConfigured: false,
-			cliConfigured: true,
-			webGoogleID:   "",
-			cliGoogleID:   "cli-google-id",
+			webConfigured:    false,
+			cliConfigured:    true,
+			deviceConfigured: false,
+			webGoogleID:      "",
+			cliGoogleID:      "cli-google-id",
+			deviceGoogleID:   "",
 		},
 		{
-			name: "separate web and cli configs",
+			name: "device-specific config only",
+			config: OAuthConfig{
+				Device: OAuthClientConfig{
+					Google: OAuthProviderConfig{
+						ClientID:     "device-google-id",
+						ClientSecret: "device-secret",
+					},
+				},
+			},
+			webConfigured:    false,
+			cliConfigured:    false,
+			deviceConfigured: true,
+			webGoogleID:      "",
+			cliGoogleID:      "",
+			deviceGoogleID:   "device-google-id",
+		},
+		{
+			name: "separate web, cli, and device configs",
 			config: OAuthConfig{
 				Web: OAuthClientConfig{
 					Google: OAuthProviderConfig{
@@ -260,11 +303,19 @@ func TestOAuthConfig_ClientTypeConfigs(t *testing.T) {
 						ClientSecret: "cli-secret",
 					},
 				},
+				Device: OAuthClientConfig{
+					Google: OAuthProviderConfig{
+						ClientID:     "device-google-id",
+						ClientSecret: "device-secret",
+					},
+				},
 			},
-			webConfigured: true,
-			cliConfigured: true,
-			webGoogleID:   "web-google-id",
-			cliGoogleID:   "cli-google-id",
+			webConfigured:    true,
+			cliConfigured:    true,
+			deviceConfigured: true,
+			webGoogleID:      "web-google-id",
+			cliGoogleID:      "cli-google-id",
+			deviceGoogleID:   "device-google-id",
 		},
 	}
 
@@ -272,6 +323,7 @@ func TestOAuthConfig_ClientTypeConfigs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			webCfg := tc.config.Web
 			cliCfg := tc.config.CLI
+			deviceCfg := tc.config.Device
 
 			if webCfg.IsConfigured() != tc.webConfigured {
 				t.Errorf("Web.IsConfigured() = %v, want %v", webCfg.IsConfigured(), tc.webConfigured)
@@ -279,11 +331,17 @@ func TestOAuthConfig_ClientTypeConfigs(t *testing.T) {
 			if cliCfg.IsConfigured() != tc.cliConfigured {
 				t.Errorf("CLI.IsConfigured() = %v, want %v", cliCfg.IsConfigured(), tc.cliConfigured)
 			}
+			if deviceCfg.IsConfigured() != tc.deviceConfigured {
+				t.Errorf("Device.IsConfigured() = %v, want %v", deviceCfg.IsConfigured(), tc.deviceConfigured)
+			}
 			if webCfg.Google.ClientID != tc.webGoogleID {
 				t.Errorf("Web.Google.ClientID = %q, want %q", webCfg.Google.ClientID, tc.webGoogleID)
 			}
 			if cliCfg.Google.ClientID != tc.cliGoogleID {
 				t.Errorf("CLI.Google.ClientID = %q, want %q", cliCfg.Google.ClientID, tc.cliGoogleID)
+			}
+			if deviceCfg.Google.ClientID != tc.deviceGoogleID {
+				t.Errorf("Device.Google.ClientID = %q, want %q", deviceCfg.Google.ClientID, tc.deviceGoogleID)
 			}
 		})
 	}
@@ -301,6 +359,12 @@ func TestOAuthService_GetAuthorizationURLForClient(t *testing.T) {
 			Google: OAuthProviderConfig{
 				ClientID:     "cli-google-id",
 				ClientSecret: "cli-secret",
+			},
+		},
+		Device: OAuthClientConfig{
+			Google: OAuthProviderConfig{
+				ClientID:     "device-google-id",
+				ClientSecret: "device-secret",
 			},
 		},
 	}
@@ -326,6 +390,16 @@ func TestOAuthService_GetAuthorizationURLForClient(t *testing.T) {
 			t.Errorf("URL should contain CLI client ID: %s", url)
 		}
 	})
+
+	t.Run("device client uses device config", func(t *testing.T) {
+		url, err := service.GetAuthorizationURLForClient(OAuthClientTypeDevice, "google", "http://localhost:18271/callback", "test-state")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(url, "client_id=device-google-id") {
+			t.Errorf("URL should contain device client ID: %s", url)
+		}
+	})
 }
 
 func TestOAuthService_IsProviderConfiguredForClient(t *testing.T) {
@@ -342,6 +416,12 @@ func TestOAuthService_IsProviderConfiguredForClient(t *testing.T) {
 				ClientSecret: "cli-secret",
 			},
 		},
+		Device: OAuthClientConfig{
+			Google: OAuthProviderConfig{
+				ClientID:     "device-google-id",
+				ClientSecret: "device-secret",
+			},
+		},
 	}
 
 	service := NewOAuthService(config)
@@ -355,6 +435,8 @@ func TestOAuthService_IsProviderConfiguredForClient(t *testing.T) {
 		{OAuthClientTypeWeb, "github", false},
 		{OAuthClientTypeCLI, "google", false},
 		{OAuthClientTypeCLI, "github", true},
+		{OAuthClientTypeDevice, "google", true},
+		{OAuthClientTypeDevice, "github", false},
 	}
 
 	for _, tc := range tests {

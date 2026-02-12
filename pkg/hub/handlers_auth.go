@@ -867,13 +867,13 @@ func (s *Server) handleCLIDeviceAuthorize(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if !s.oauthService.IsProviderConfiguredForClient(OAuthClientTypeCLI, provider) {
+	if !s.oauthService.IsProviderConfiguredForClient(OAuthClientTypeDevice, provider) {
 		writeError(w, http.StatusBadRequest, ErrCodeValidationError,
-			"OAuth provider not configured for CLI: "+provider, nil)
+			"OAuth provider not configured for device flow: "+provider, nil)
 		return
 	}
 
-	codeResp, err := s.oauthService.RequestDeviceCode(r.Context(), OAuthClientTypeCLI, provider)
+	codeResp, err := s.oauthService.RequestDeviceCode(r.Context(), OAuthClientTypeDevice, provider)
 	if err != nil {
 		slog.Error("Device code request failed", "provider", provider, "error", err)
 		writeError(w, http.StatusInternalServerError, "oauth_error",
@@ -922,7 +922,7 @@ func (s *Server) handleCLIDeviceToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	tokenResp, err := s.oauthService.PollDeviceToken(ctx, OAuthClientTypeCLI, provider, req.DeviceCode)
+	tokenResp, err := s.oauthService.PollDeviceToken(ctx, OAuthClientTypeDevice, provider, req.DeviceCode)
 	if err != nil {
 		// Check if it's a device auth error (pending, slow_down, expired)
 		if authErr, ok := err.(*DeviceAuthError); ok {

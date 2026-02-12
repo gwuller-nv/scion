@@ -270,6 +270,10 @@ func TestEnvKeyToConfigKey(t *testing.T) {
 		{"OAUTH_CLI_GOOGLE_CLIENTSECRET", "oauth.cli.google.clientSecret"},
 		{"OAUTH_WEB_GITHUB_CLIENTID", "oauth.web.github.clientId"},
 		{"OAUTH_WEB_GITHUB_CLIENTSECRET", "oauth.web.github.clientSecret"},
+		{"OAUTH_DEVICE_GOOGLE_CLIENTID", "oauth.device.google.clientId"},
+		{"OAUTH_DEVICE_GOOGLE_CLIENTSECRET", "oauth.device.google.clientSecret"},
+		{"OAUTH_DEVICE_GITHUB_CLIENTID", "oauth.device.github.clientId"},
+		{"OAUTH_DEVICE_GITHUB_CLIENTSECRET", "oauth.device.github.clientSecret"},
 		{"RUNTIMEBROKER_READTIMEOUT", "runtimebroker.readTimeout"},
 		{"RUNTIMEBROKER_WRITETIMEOUT", "runtimebroker.writeTimeout"},
 		{"RUNTIMEBROKER_BROKERID", "runtimebroker.brokerId"},
@@ -296,11 +300,19 @@ func TestLoadGlobalConfigOAuthEnvOverride(t *testing.T) {
 	os.Setenv("SCION_SERVER_OAUTH_CLI_GOOGLE_CLIENTSECRET", "test-cli-secret")
 	os.Setenv("SCION_SERVER_OAUTH_WEB_GITHUB_CLIENTID", "test-web-gh-id")
 	os.Setenv("SCION_SERVER_OAUTH_WEB_GITHUB_CLIENTSECRET", "test-web-gh-secret")
+	os.Setenv("SCION_SERVER_OAUTH_DEVICE_GOOGLE_CLIENTID", "test-device-google-id")
+	os.Setenv("SCION_SERVER_OAUTH_DEVICE_GOOGLE_CLIENTSECRET", "test-device-google-secret")
+	os.Setenv("SCION_SERVER_OAUTH_DEVICE_GITHUB_CLIENTID", "test-device-gh-id")
+	os.Setenv("SCION_SERVER_OAUTH_DEVICE_GITHUB_CLIENTSECRET", "test-device-gh-secret")
 	defer func() {
 		os.Unsetenv("SCION_SERVER_OAUTH_CLI_GOOGLE_CLIENTID")
 		os.Unsetenv("SCION_SERVER_OAUTH_CLI_GOOGLE_CLIENTSECRET")
 		os.Unsetenv("SCION_SERVER_OAUTH_WEB_GITHUB_CLIENTID")
 		os.Unsetenv("SCION_SERVER_OAUTH_WEB_GITHUB_CLIENTSECRET")
+		os.Unsetenv("SCION_SERVER_OAUTH_DEVICE_GOOGLE_CLIENTID")
+		os.Unsetenv("SCION_SERVER_OAUTH_DEVICE_GOOGLE_CLIENTSECRET")
+		os.Unsetenv("SCION_SERVER_OAUTH_DEVICE_GITHUB_CLIENTID")
+		os.Unsetenv("SCION_SERVER_OAUTH_DEVICE_GITHUB_CLIENTSECRET")
 	}()
 
 	cfg, err := LoadGlobalConfig("")
@@ -322,6 +334,22 @@ func TestLoadGlobalConfigOAuthEnvOverride(t *testing.T) {
 
 	if cfg.OAuth.Web.GitHub.ClientSecret != "test-web-gh-secret" {
 		t.Errorf("expected Web GitHub ClientSecret 'test-web-gh-secret', got %q", cfg.OAuth.Web.GitHub.ClientSecret)
+	}
+
+	if cfg.OAuth.Device.Google.ClientID != "test-device-google-id" {
+		t.Errorf("expected Device Google ClientID 'test-device-google-id', got %q", cfg.OAuth.Device.Google.ClientID)
+	}
+
+	if cfg.OAuth.Device.Google.ClientSecret != "test-device-google-secret" {
+		t.Errorf("expected Device Google ClientSecret 'test-device-google-secret', got %q", cfg.OAuth.Device.Google.ClientSecret)
+	}
+
+	if cfg.OAuth.Device.GitHub.ClientID != "test-device-gh-id" {
+		t.Errorf("expected Device GitHub ClientID 'test-device-gh-id', got %q", cfg.OAuth.Device.GitHub.ClientID)
+	}
+
+	if cfg.OAuth.Device.GitHub.ClientSecret != "test-device-gh-secret" {
+		t.Errorf("expected Device GitHub ClientSecret 'test-device-gh-secret', got %q", cfg.OAuth.Device.GitHub.ClientSecret)
 	}
 }
 

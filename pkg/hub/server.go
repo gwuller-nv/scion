@@ -319,6 +319,7 @@ func New(cfg ServerConfig, s store.Store) *Server {
 		// Log which providers are configured
 		logOAuthProviders("Web", cfg.OAuthConfig.Web)
 		logOAuthProviders("CLI", cfg.OAuthConfig.CLI)
+		logOAuthProviders("Device", cfg.OAuthConfig.Device)
 	} else {
 		slog.Info("OAuth service NOT configured - no providers available")
 		slog.Info("To enable OAuth, set environment variables SCION_SERVER_OAUTH_CLI_GOOGLE_CLIENTID, etc.")

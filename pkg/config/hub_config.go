@@ -117,12 +117,14 @@ type OAuthClientConfig struct {
 }
 
 // OAuthConfig holds OAuth provider configurations.
-// Web and CLI use separate OAuth clients due to different redirect URI requirements.
+// Web, CLI, and Device use separate OAuth clients due to different redirect URI requirements.
 type OAuthConfig struct {
 	// Web OAuth client settings (for web frontend flows).
 	Web OAuthClientConfig `json:"web" yaml:"web" koanf:"web"`
 	// CLI OAuth client settings (for CLI localhost callback flows).
 	CLI OAuthClientConfig `json:"cli" yaml:"cli" koanf:"cli"`
+	// Device OAuth client settings (for device authorization grant / headless flows).
+	Device OAuthClientConfig `json:"device" yaml:"device" koanf:"device"`
 }
 
 // GlobalConfig holds the complete server configuration.
@@ -268,6 +270,11 @@ func LoadGlobalConfig(configPath string) (*GlobalConfig, error) {
 		"oauth.cli.google.clientSecret": "",
 		"oauth.cli.github.clientId":     "",
 		"oauth.cli.github.clientSecret": "",
+		// Device OAuth client config
+		"oauth.device.google.clientId":     "",
+		"oauth.device.google.clientSecret": "",
+		"oauth.device.github.clientId":     "",
+		"oauth.device.github.clientSecret": "",
 		// Storage defaults
 		"storage.provider":  defaults.Storage.Provider,
 		"storage.bucket":    defaults.Storage.Bucket,

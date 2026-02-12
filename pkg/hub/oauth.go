@@ -67,23 +67,25 @@ func (c *OAuthClientConfig) GetProvider(provider string) OAuthProviderConfig {
 }
 
 // OAuthConfig holds configuration for all OAuth providers.
-// Web and CLI use separate OAuth clients due to different redirect URI requirements.
+// Web, CLI, and Device use separate OAuth clients due to different redirect URI requirements.
 type OAuthConfig struct {
 	// Web OAuth client settings (for web frontend flows).
 	Web OAuthClientConfig
 	// CLI OAuth client settings (for CLI localhost callback flows).
 	CLI OAuthClientConfig
+	// Device OAuth client settings (for device authorization grant / headless flows).
+	Device OAuthClientConfig
 }
 
 // IsConfigured returns true if at least one OAuth provider is configured.
 func (c *OAuthConfig) IsConfigured() bool {
-	return c.Web.IsConfigured() || c.CLI.IsConfigured()
+	return c.Web.IsConfigured() || c.CLI.IsConfigured() || c.Device.IsConfigured()
 }
 
 // IsProviderConfigured returns true if the specified provider is configured
 // for at least one client type.
 func (c *OAuthConfig) IsProviderConfigured(provider string) bool {
-	return c.Web.IsProviderConfigured(provider) || c.CLI.IsProviderConfigured(provider)
+	return c.Web.IsProviderConfigured(provider) || c.CLI.IsProviderConfigured(provider) || c.Device.IsProviderConfigured(provider)
 }
 
 // ClientType represents the type of client (web or CLI).
@@ -94,6 +96,8 @@ const (
 	OAuthClientTypeWeb OAuthClientType = "web"
 	// OAuthClientTypeCLI is for CLI localhost callback OAuth flows.
 	OAuthClientTypeCLI OAuthClientType = "cli"
+	// OAuthClientTypeDevice is for device authorization grant (headless) flows.
+	OAuthClientTypeDevice OAuthClientType = "device"
 )
 
 // OAuthService handles OAuth operations for authentication.
@@ -119,6 +123,8 @@ func (s *OAuthService) getClientConfig(clientType OAuthClientType) OAuthClientCo
 		return s.config.Web
 	case OAuthClientTypeCLI:
 		return s.config.CLI
+	case OAuthClientTypeDevice:
+		return s.config.Device
 	default:
 		return OAuthClientConfig{}
 	}

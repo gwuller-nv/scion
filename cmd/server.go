@@ -458,6 +458,16 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 						ClientSecret: cfg.OAuth.CLI.GitHub.ClientSecret,
 					},
 				},
+				Device: hub.OAuthClientConfig{
+					Google: hub.OAuthProviderConfig{
+						ClientID:     cfg.OAuth.Device.Google.ClientID,
+						ClientSecret: cfg.OAuth.Device.Google.ClientSecret,
+					},
+					GitHub: hub.OAuthProviderConfig{
+						ClientID:     cfg.OAuth.Device.GitHub.ClientID,
+						ClientSecret: cfg.OAuth.Device.GitHub.ClientSecret,
+					},
+				},
 			},
 		}
 
@@ -1086,6 +1096,10 @@ func logOAuthDebug(cfg *config.GlobalConfig) {
 	log.Printf("[Debug]   Web Google ClientSecret: %s", redactForDebug(cfg.OAuth.Web.Google.ClientSecret))
 	log.Printf("[Debug]   Web GitHub ClientID: %s", redactForDebug(cfg.OAuth.Web.GitHub.ClientID))
 	log.Printf("[Debug]   Web GitHub ClientSecret: %s", redactForDebug(cfg.OAuth.Web.GitHub.ClientSecret))
+	log.Printf("[Debug]   Device Google ClientID: %s", redactForDebug(cfg.OAuth.Device.Google.ClientID))
+	log.Printf("[Debug]   Device Google ClientSecret: %s", redactForDebug(cfg.OAuth.Device.Google.ClientSecret))
+	log.Printf("[Debug]   Device GitHub ClientID: %s", redactForDebug(cfg.OAuth.Device.GitHub.ClientID))
+	log.Printf("[Debug]   Device GitHub ClientSecret: %s", redactForDebug(cfg.OAuth.Device.GitHub.ClientSecret))
 }
 
 // redactForDebug returns a redacted version of a secret for debug logging.
