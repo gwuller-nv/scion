@@ -16,9 +16,18 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version number of scion",
 	Long:  `All software has versions. This is scion's`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if isJSONOutput() {
+			return outputJSON(map[string]string{
+				"version":   version.Version,
+				"commit":    version.Commit,
+				"buildTime": version.BuildTime,
+				"short":     version.Short(),
+			})
+		}
 		fmt.Println(util.GetBanner())
 		fmt.Println(version.Get())
+		return nil
 	},
 }
 

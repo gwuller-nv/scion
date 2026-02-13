@@ -16,7 +16,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1014,6 +1013,11 @@ func runBrokerWithdraw(cmd *cobra.Command, args []string) error {
 }
 
 func runBrokerStatus(cmd *cobra.Command, args []string) error {
+	// Bridge --json flag to global --format
+	if brokerStatusJSON {
+		outputFormat = "json"
+	}
+
 	// If --broker flag is provided, show remote broker status
 	if brokerBrokerID != "" {
 		return runRemoteBrokerStatus(brokerBrokerID)
@@ -1116,10 +1120,8 @@ func runBrokerStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output
-	if brokerStatusJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(status)
+	if isJSONOutput() {
+		return outputJSON(status)
 	}
 
 	// Text output
@@ -1243,10 +1245,8 @@ func runRemoteBrokerStatus(brokerID string) error {
 	}
 
 	// Output
-	if brokerStatusJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(status)
+	if isJSONOutput() {
+		return outputJSON(status)
 	}
 
 	// Text output

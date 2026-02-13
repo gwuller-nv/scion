@@ -56,10 +56,22 @@ With --global, it initializes in the user's home folder.`,
 		harnesses := harness.All()
 
 		if globalInit {
-			fmt.Println("Initializing global scion directory...")
+			if !isJSONOutput() {
+				fmt.Println("Initializing global scion directory...")
+			}
 			if err := config.InitGlobal(harnesses); err != nil {
 				return fmt.Errorf("failed to initialize global config: %w", err)
 			}
+
+			if isJSONOutput() {
+				return outputJSON(ActionResult{
+					Status:  "success",
+					Command: "grove init",
+					Message: "scion grove successfully initialized.",
+					Details: map[string]interface{}{"global": true},
+				})
+			}
+
 			fmt.Println("scion grove successfully initialized.")
 
 			// Prompt for Hub registration if Hub is configured
@@ -104,7 +116,9 @@ With --global, it initializes in the user's home folder.`,
 			}
 		}
 
-		fmt.Println("Initializing scion project grove...")
+		if !isJSONOutput() {
+			fmt.Println("Initializing scion project grove...")
+		}
 		if err := config.InitProject("", harnesses); err != nil {
 			return fmt.Errorf("failed to initialize project grove: %w", err)
 		}
@@ -112,7 +126,21 @@ With --global, it initializes in the user's home folder.`,
 		// Generate and save grove_id
 		groveID := config.GenerateGroveIDForDir(filepath.Dir(targetDir))
 		if err := config.UpdateSetting(targetDir, "grove_id", groveID, false); err != nil {
-			fmt.Printf("Warning: failed to save grove_id: %v\n", err)
+			if !isJSONOutput() {
+				fmt.Printf("Warning: failed to save grove_id: %v\n", err)
+			}
+		}
+
+		if isJSONOutput() {
+			return outputJSON(ActionResult{
+				Status:  "success",
+				Command: "grove init",
+				Message: "scion grove successfully initialized.",
+				Details: map[string]interface{}{
+					"groveId": groveID,
+					"path":    targetDir,
+				},
+			})
 		}
 
 		fmt.Println("scion grove successfully initialized.")

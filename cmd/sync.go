@@ -239,6 +239,18 @@ func syncFromViaHub(hubCtx *HubContext, agentID, agentName, localPath string) er
 		return fmt.Errorf("download failed: %w", err)
 	}
 
+	if isJSONOutput() {
+		return outputJSON(map[string]interface{}{
+			"status":          "success",
+			"command":         "sync",
+			"direction":       "from",
+			"agent":           agentName,
+			"filesDownloaded": downloadedCount,
+			"bytesTransferred": downloadedBytes,
+			"filesSkipped":    skipCount,
+		})
+	}
+
 	fmt.Printf("Sync complete: %d files, %s transferred\n", downloadedCount, humanize.Bytes(uint64(downloadedBytes)))
 	if skipCount > 0 {
 		fmt.Printf("Skipped %d unchanged files\n", skipCount)
@@ -338,6 +350,19 @@ func syncToViaHub(hubCtx *HubContext, agentID, agentName, localPath string) erro
 	finalizeResp, err := hubCtx.Client.Workspace().FinalizeSyncTo(ctx, agentID, manifest)
 	if err != nil {
 		return wrapHubError(fmt.Errorf("failed to finalize sync: %w", err))
+	}
+
+	if isJSONOutput() {
+		return outputJSON(map[string]interface{}{
+			"status":          "success",
+			"command":         "sync",
+			"direction":       "to",
+			"agent":           agentName,
+			"filesUploaded":   uploadedCount,
+			"bytesTransferred": uploadedBytes,
+			"filesSkipped":    len(resp.ExistingFiles),
+			"filesApplied":    finalizeResp.FilesApplied,
+		})
 	}
 
 	fmt.Printf("Sync complete: %d files uploaded, %s transferred\n", uploadedCount, humanize.Bytes(uint64(uploadedBytes)))

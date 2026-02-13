@@ -99,6 +99,57 @@ func runTemplateList(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if isJSONOutput() {
+		type templateEntry struct {
+			Name string `json:"name"`
+			Path string `json:"path,omitempty"`
+			ID   string `json:"id,omitempty"`
+		}
+		output := map[string]interface{}{}
+
+		localSection := map[string][]templateEntry{}
+		if len(localGlobal) > 0 {
+			entries := make([]templateEntry, len(localGlobal))
+			for i, t := range localGlobal {
+				entries[i] = templateEntry{Name: t.Name, Path: t.Path}
+			}
+			localSection["global"] = entries
+		}
+		if len(localGrove) > 0 {
+			entries := make([]templateEntry, len(localGrove))
+			for i, t := range localGrove {
+				entries[i] = templateEntry{Name: t.Name, Path: t.Path}
+			}
+			localSection["grove"] = entries
+		}
+		if len(localSection) > 0 {
+			output["local"] = localSection
+		}
+
+		if hubAvailable {
+			hubSection := map[string][]templateEntry{}
+			if len(hubGlobal) > 0 {
+				entries := make([]templateEntry, len(hubGlobal))
+				for i, t := range hubGlobal {
+					entries[i] = templateEntry{Name: t.Name, ID: t.ID}
+				}
+				hubSection["global"] = entries
+			}
+			if len(hubGrove) > 0 {
+				entries := make([]templateEntry, len(hubGrove))
+				for i, t := range hubGrove {
+					entries[i] = templateEntry{Name: t.Name, ID: t.ID}
+				}
+				hubSection["grove"] = entries
+			}
+			if len(hubSection) > 0 {
+				output["hub"] = hubSection
+			}
+		}
+
+		return outputJSON(output)
+	}
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
 	if hubAvailable {
@@ -251,6 +302,15 @@ func runTemplateShow(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
+		if isJSONOutput() {
+			return outputJSON(map[string]interface{}{
+				"name":     tpl.Name,
+				"location": string(match.Location),
+				"path":     tpl.Path,
+				"config":   cfg,
+			})
+		}
+
 		fmt.Printf("Template: %s\n", tpl.Name)
 		fmt.Printf("Location: %s\n", match.DisplayLocation())
 		fmt.Printf("Path:     %s\n", tpl.Path)
@@ -263,6 +323,27 @@ func runTemplateShow(cmd *cobra.Command, args []string) error {
 
 	// Hub template - display hub info
 	t := match.HubTemplate
+
+	if isJSONOutput() {
+		output := map[string]interface{}{
+			"name":     t.Name,
+			"location": string(match.Location),
+			"id":       t.ID,
+			"harness":  t.Harness,
+			"scope":    t.Scope,
+			"status":   t.Status,
+			"created":  t.Created.Format(time.RFC3339),
+			"updated":  t.Updated.Format(time.RFC3339),
+		}
+		if t.ContentHash != "" {
+			output["contentHash"] = t.ContentHash
+		}
+		if t.Description != "" {
+			output["description"] = t.Description
+		}
+		return outputJSON(output)
+	}
+
 	fmt.Printf("Template: %s\n", t.Name)
 	fmt.Printf("Location: %s\n", match.DisplayLocation())
 	fmt.Printf("ID:       %s\n", t.ID)
@@ -298,6 +379,18 @@ var templatesCreateCmd = &cobra.Command{
 		err := config.CreateTemplate(name, h, global)
 		if err != nil {
 			return err
+		}
+		if isJSONOutput() {
+			return outputJSON(ActionResult{
+				Status:  "success",
+				Command: "templates create",
+				Message: fmt.Sprintf("Template %s created successfully.", name),
+				Details: map[string]interface{}{
+					"name":    name,
+					"harness": harnessName,
+					"global":  global,
+				},
+			})
 		}
 		fmt.Printf("Template %s created successfully.\n", name)
 		return nil
@@ -370,6 +463,17 @@ func deleteTemplateMatch(ctx context.Context, match *TemplateMatch, hubCtx *HubC
 		if err := config.DeleteTemplate(match.Name, isGlobal); err != nil {
 			return fmt.Errorf("failed to delete local template: %w", err)
 		}
+		if isJSONOutput() {
+			return outputJSON(ActionResult{
+				Status:  "success",
+				Command: "templates delete",
+				Message: fmt.Sprintf("Local template '%s' deleted successfully.", match.Name),
+				Details: map[string]interface{}{
+					"name":     match.Name,
+					"location": string(match.Location),
+				},
+			})
+		}
 		fmt.Printf("Local template '%s' deleted successfully.\n", match.Name)
 	} else {
 		// Delete hub template
@@ -380,6 +484,18 @@ func deleteTemplateMatch(ctx context.Context, match *TemplateMatch, hubCtx *HubC
 		defer cancel()
 		if err := hubCtx.Client.Templates().Delete(deleteCtx, match.HubTemplate.ID); err != nil {
 			return fmt.Errorf("failed to delete Hub template: %w", err)
+		}
+		if isJSONOutput() {
+			return outputJSON(ActionResult{
+				Status:  "success",
+				Command: "templates delete",
+				Message: fmt.Sprintf("Hub template '%s' deleted successfully.", match.Name),
+				Details: map[string]interface{}{
+					"name":     match.Name,
+					"location": string(match.Location),
+					"id":       match.HubTemplate.ID,
+				},
+			})
 		}
 		fmt.Printf("Hub template '%s' deleted successfully.\n", match.Name)
 	}
@@ -439,6 +555,18 @@ func runTemplateClone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if isJSONOutput() {
+		return outputJSON(ActionResult{
+			Status:  "success",
+			Command: "templates clone",
+			Message: fmt.Sprintf("Template '%s' cloned to '%s' successfully.", srcName, destName),
+			Details: map[string]interface{}{
+				"source":      srcName,
+				"destination": destName,
+				"global":      destGlobal,
+			},
+		})
+	}
 	fmt.Printf("Template '%s' cloned to '%s' successfully.\n", srcName, destName)
 	return nil
 }
@@ -503,6 +631,13 @@ var templatesUpdateDefaultCmd = &cobra.Command{
 		err := config.UpdateDefaultTemplates(global, harnesses)
 		if err != nil {
 			return err
+		}
+		if isJSONOutput() {
+			return outputJSON(ActionResult{
+				Status:  "success",
+				Command: "templates update-default",
+				Message: "Default templates updated successfully.",
+			})
 		}
 		fmt.Println("Default templates updated successfully.")
 		return nil
@@ -727,6 +862,20 @@ func pullTemplateFromHubMatch(hubCtx *HubContext, match *TemplateMatch, toPath s
 		fmt.Printf("  Downloaded: %s\n", fileInfo.Path)
 	}
 
+	if isJSONOutput() {
+		return outputJSON(ActionResult{
+			Status:  "success",
+			Command: "templates pull",
+			Message: fmt.Sprintf("Template '%s' pulled successfully.", name),
+			Details: map[string]interface{}{
+				"name":        name,
+				"id":          template.ID,
+				"destination": destPath,
+				"filesCount":  len(downloadResp.Files),
+			},
+		})
+	}
+
 	fmt.Printf("Template '%s' pulled successfully to %s\n", name, destPath)
 
 	return nil
@@ -921,6 +1070,22 @@ func syncTemplateToHub(hubCtx *HubContext, name, localPath, scope, harnessType s
 	template, err := hubCtx.Client.Templates().Finalize(ctx, templateID, manifest)
 	if err != nil {
 		return fmt.Errorf("failed to finalize template: %w", err)
+	}
+
+	if isJSONOutput() {
+		return outputJSON(ActionResult{
+			Status:  "success",
+			Command: "templates sync",
+			Message: fmt.Sprintf("Template '%s' synced successfully.", name),
+			Details: map[string]interface{}{
+				"id":          template.ID,
+				"name":        name,
+				"status":      template.Status,
+				"contentHash": template.ContentHash,
+				"scope":       scope,
+				"filesUploaded": len(filesToUpload),
+			},
+		})
 	}
 
 	fmt.Printf("Template '%s' synced successfully!\n", name)

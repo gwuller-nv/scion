@@ -409,6 +409,11 @@ func getHubClient(settings *config.Settings) (hubclient.Client, error) {
 }
 
 func runHubStatus(cmd *cobra.Command, args []string) error {
+	// Bridge --json flag to global --format
+	if hubOutputJSON {
+		outputFormat = "json"
+	}
+
 	// Resolve grove path to find project settings
 	resolvedPath, isGlobal, err := config.ResolveGrovePath(grovePath)
 	if err != nil {
@@ -427,7 +432,7 @@ func runHubStatus(cmd *cobra.Command, args []string) error {
 	// Get authentication info
 	authInfo := getAuthInfo(settings, endpoint)
 
-	if hubOutputJSON {
+	if isJSONOutput() {
 		status := map[string]interface{}{
 			"enabled":       hubEnabled,
 			"cliOverride":   noHub,
@@ -480,9 +485,7 @@ func runHubStatus(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(status)
+		return outputJSON(status)
 	}
 
 	// Text output
@@ -771,6 +774,11 @@ func getGroveContextJSON(client hubclient.Client, grovePath string, isGlobal boo
 }
 
 func runHubGroves(cmd *cobra.Command, args []string) error {
+	// Bridge --json flag to global --format
+	if hubOutputJSON {
+		outputFormat = "json"
+	}
+
 	// If a grove name is provided, show info for that grove
 	if len(args) == 1 {
 		return runHubGrovesInfo(cmd, args)
@@ -800,10 +808,8 @@ func runHubGroves(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to list groves: %w", err)
 	}
 
-	if hubOutputJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(resp.Groves)
+	if isJSONOutput() {
+		return outputJSON(resp.Groves)
 	}
 
 	if len(resp.Groves) == 0 {
@@ -838,6 +844,11 @@ func runHubGroves(cmd *cobra.Command, args []string) error {
 }
 
 func runHubGrovesInfo(cmd *cobra.Command, args []string) error {
+	// Bridge --json flag to global --format
+	if hubOutputJSON {
+		outputFormat = "json"
+	}
+
 	// Resolve grove path to find project settings
 	gp := grovePath
 	if gp == "" && globalMode {
@@ -893,7 +904,7 @@ func runHubGrovesInfo(cmd *cobra.Command, args []string) error {
 		util.Debugf("Failed to get providers: %v", err)
 	}
 
-	if hubOutputJSON {
+	if isJSONOutput() {
 		output := map[string]interface{}{
 			"id":         grove.ID,
 			"name":       grove.Name,
@@ -915,9 +926,7 @@ func runHubGrovesInfo(cmd *cobra.Command, args []string) error {
 		if providersResp != nil && len(providersResp.Providers) > 0 {
 			output["providers"] = providersResp.Providers
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return outputJSON(output)
 	}
 
 	// Text output
@@ -1036,6 +1045,20 @@ func runHubGrovesDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to delete grove: %w", err)
 	}
 
+	if isJSONOutput() {
+		return outputJSON(ActionResult{
+			Status:  "success",
+			Command: "hub groves delete",
+			Message: fmt.Sprintf("Grove '%s' deleted successfully.", grove.Name),
+			Details: map[string]interface{}{
+				"groveId":       grove.ID,
+				"groveName":     grove.Name,
+				"agentsDeleted": deleteAgents,
+				"agentCount":    grove.AgentCount,
+			},
+		})
+	}
+
 	fmt.Printf("Grove '%s' deleted successfully.\n", grove.Name)
 	if deleteAgents {
 		fmt.Printf("Deleted %d agent(s).\n", grove.AgentCount)
@@ -1081,6 +1104,11 @@ func valueOrDefault(value, defaultVal string) string {
 }
 
 func runHubBrokers(cmd *cobra.Command, args []string) error {
+	// Bridge --json flag to global --format
+	if hubOutputJSON {
+		outputFormat = "json"
+	}
+
 	// Resolve grove path to find project settings
 	resolvedPath, _, err := config.ResolveGrovePath(grovePath)
 	if err != nil {
@@ -1105,10 +1133,8 @@ func runHubBrokers(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to list brokers: %w", err)
 	}
 
-	if hubOutputJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(resp.Brokers)
+	if isJSONOutput() {
+		return outputJSON(resp.Brokers)
 	}
 
 	if len(resp.Brokers) == 0 {
@@ -1134,6 +1160,11 @@ func runHubBrokers(cmd *cobra.Command, args []string) error {
 }
 
 func runHubBrokersInfo(cmd *cobra.Command, args []string) error {
+	// Bridge --json flag to global --format
+	if hubOutputJSON {
+		outputFormat = "json"
+	}
+
 	// Resolve grove path to find project settings
 	resolvedPath, _, err := config.ResolveGrovePath(grovePath)
 	if err != nil {
@@ -1171,7 +1202,7 @@ func runHubBrokersInfo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if hubOutputJSON {
+	if isJSONOutput() {
 		output := map[string]interface{}{
 			"id":              broker.ID,
 			"name":            broker.Name,
@@ -1207,9 +1238,7 @@ func runHubBrokersInfo(cmd *cobra.Command, args []string) error {
 		if len(broker.Annotations) > 0 {
 			output["annotations"] = broker.Annotations
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return outputJSON(output)
 	}
 
 	// Text output
@@ -1345,6 +1374,19 @@ func runHubBrokersDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to delete broker: %w", err)
 	}
 
+	if isJSONOutput() {
+		return outputJSON(ActionResult{
+			Status:  "success",
+			Command: "hub brokers delete",
+			Message: fmt.Sprintf("Broker '%s' deleted successfully.", broker.Name),
+			Details: map[string]interface{}{
+				"brokerId":   broker.ID,
+				"brokerName": broker.Name,
+				"grovesRemoved": len(broker.Groves),
+			},
+		})
+	}
+
 	fmt.Printf("Broker '%s' deleted successfully.\n", broker.Name)
 	if len(broker.Groves) > 0 {
 		fmt.Printf("Removed from %d grove(s).\n", len(broker.Groves))
@@ -1454,6 +1496,19 @@ func runHubEnable(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if isJSONOutput() {
+		return outputJSON(ActionResult{
+			Status:  "success",
+			Command: "hub enable",
+			Message: "Hub integration enabled.",
+			Details: map[string]interface{}{
+				"endpoint":   endpoint,
+				"hubStatus":  health.Status,
+				"hubVersion": health.Version,
+			},
+		})
+	}
+
 	fmt.Printf("Hub integration enabled.\n")
 	fmt.Printf("Endpoint: %s\n", endpoint)
 	fmt.Printf("Hub Status: %s (version %s)\n", health.Status, health.Version)
@@ -1476,6 +1531,13 @@ func runHubDisable(cmd *cobra.Command, args []string) error {
 	}
 
 	if !settings.IsHubEnabled() {
+		if isJSONOutput() {
+			return outputJSON(ActionResult{
+				Status:  "success",
+				Command: "hub disable",
+				Message: "Hub integration is already disabled.",
+			})
+		}
 		fmt.Println("Hub integration is already disabled.")
 		return nil
 	}
@@ -1483,6 +1545,14 @@ func runHubDisable(cmd *cobra.Command, args []string) error {
 	// Save the disabled setting
 	if err := config.UpdateSetting(resolvedPath, "hub.enabled", "false", isGlobal); err != nil {
 		return fmt.Errorf("failed to save setting: %w", err)
+	}
+
+	if isJSONOutput() {
+		return outputJSON(ActionResult{
+			Status:  "success",
+			Command: "hub disable",
+			Message: "Hub integration disabled.",
+		})
 	}
 
 	fmt.Println("Hub integration disabled.")
@@ -1631,6 +1701,19 @@ func runHubLink(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if isJSONOutput() {
+		return outputJSON(ActionResult{
+			Status:  "success",
+			Command: "hub link",
+			Message: fmt.Sprintf("Grove '%s' is now linked to the Hub.", groveName),
+			Details: map[string]interface{}{
+				"grove":    groveName,
+				"groveId":  groveID,
+				"endpoint": endpoint,
+			},
+		})
+	}
+
 	fmt.Println()
 	fmt.Printf("Grove '%s' is now linked to the Hub.\n", groveName)
 
@@ -1738,6 +1821,17 @@ func runHubUnlink(cmd *cobra.Command, args []string) error {
 	// Disable Hub integration for this grove
 	if err := config.UpdateSetting(resolvedPath, "hub.enabled", "false", isGlobal); err != nil {
 		return fmt.Errorf("failed to disable hub: %w", err)
+	}
+
+	if isJSONOutput() {
+		return outputJSON(ActionResult{
+			Status:  "success",
+			Command: "hub unlink",
+			Message: fmt.Sprintf("Grove '%s' has been unlinked from the Hub.", groveName),
+			Details: map[string]interface{}{
+				"grove": groveName,
+			},
+		})
 	}
 
 	fmt.Println()

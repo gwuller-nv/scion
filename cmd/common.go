@@ -226,6 +226,11 @@ func RunAgent(cmd *cobra.Command, args []string, resume bool) error {
 	agentName := args[0]
 	task := strings.Join(args[1:], " ")
 
+	// Reject --format json with --attach (mutually exclusive)
+	if isJSONOutput() && attach {
+		return fmt.Errorf("--format json and --attach are mutually exclusive")
+	}
+
 	// Check if Hub should be used, excluding the target agent from sync requirements.
 	// This allows starting/resuming an agent even if it exists on Hub but not locally
 	// (will be created via Hub) or if other agents are out of sync.
@@ -296,10 +301,12 @@ func RunAgent(cmd *cobra.Command, args []string, resume bool) error {
 	}
 
 	// We still might want to show some progress in the CLI
-	if resume {
-		fmt.Printf("Resuming agent '%s'...\n", agentName)
-	} else {
-		fmt.Printf("Starting agent '%s'...\n", agentName)
+	if !isJSONOutput() {
+		if resume {
+			fmt.Printf("Resuming agent '%s'...\n", agentName)
+		} else {
+			fmt.Printf("Starting agent '%s'...\n", agentName)
+		}
 	}
 
 	info, err := mgr.Start(context.Background(), opts)
@@ -307,8 +314,10 @@ func RunAgent(cmd *cobra.Command, args []string, resume bool) error {
 		return err
 	}
 
-	for _, w := range info.Warnings {
-		fmt.Fprintln(os.Stderr, w)
+	if !isJSONOutput() {
+		for _, w := range info.Warnings {
+			fmt.Fprintln(os.Stderr, w)
+		}
 	}
 
 	if !info.Detached {
@@ -320,13 +329,30 @@ func RunAgent(cmd *cobra.Command, args []string, resume bool) error {
 	if resume {
 		displayStatus = "resumed"
 	}
+
+	if isJSONOutput() {
+		return outputJSON(ActionResult{
+			Status:   "success",
+			Command:  cmd.Name(),
+			Agent:    agentName,
+			Message:  fmt.Sprintf("Agent '%s' %s successfully.", agentName, displayStatus),
+			Warnings: info.Warnings,
+			Details: map[string]interface{}{
+				"id":       info.ID,
+				"detached": info.Detached,
+			},
+		})
+	}
+
 	fmt.Printf("Agent '%s' %s successfully (ID: %s)\n", agentName, displayStatus, info.ID)
 
 	return nil
 }
 
 func startAgentViaHub(hubCtx *HubContext, agentName, task string, resume bool) error {
-	PrintUsingHub(hubCtx.Endpoint)
+	if !isJSONOutput() {
+		PrintUsingHub(hubCtx.Endpoint)
+	}
 
 	// Get the grove ID for this project
 	groveID, err := GetGroveID(hubCtx)
@@ -397,11 +423,13 @@ func startAgentViaHub(hubCtx *HubContext, agentName, task string, resume bool) e
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	action := "Starting"
-	if resume {
-		action = "Resuming"
+	if !isJSONOutput() {
+		action := "Starting"
+		if resume {
+			action = "Resuming"
+		}
+		fmt.Printf("%s agent '%s'...\n", action, agentName)
 	}
-	fmt.Printf("%s agent '%s'...\n", action, agentName)
 
 	resp, err := createAgentWithBrokerResolution(ctx, hubCtx, groveID, req)
 	if err != nil {
@@ -409,7 +437,9 @@ func startAgentViaHub(hubCtx *HubContext, agentName, task string, resume bool) e
 	}
 
 	// Print info line when broker was auto-resolved (not explicitly specified)
-	printAutoResolvedBroker(ctx, hubCtx, runtimeBrokerID, req.RuntimeBrokerID, resp)
+	if !isJSONOutput() {
+		printAutoResolvedBroker(ctx, hubCtx, runtimeBrokerID, req.RuntimeBrokerID, resp)
+	}
 
 	// Workspace bootstrap: upload files and finalize
 	if len(workspaceFiles) > 0 && len(resp.UploadURLs) == 0 {
@@ -485,6 +515,26 @@ func startAgentViaHub(hubCtx *HubContext, agentName, task string, resume bool) e
 	if resume {
 		displayStatus = "resumed"
 	}
+
+	if isJSONOutput() {
+		result := ActionResult{
+			Status:   "success",
+			Command:  "start",
+			Agent:    agentName,
+			Message:  fmt.Sprintf("Agent '%s' %s via Hub.", agentName, displayStatus),
+			Warnings: resp.Warnings,
+			Details:  map[string]interface{}{},
+		}
+		if resp.Agent != nil {
+			result.Details["slug"] = resp.Agent.Slug
+			result.Details["status"] = resp.Agent.Status
+			if resp.Agent.RuntimeBrokerID != "" {
+				result.Details["runtimeBrokerId"] = resp.Agent.RuntimeBrokerID
+			}
+		}
+		return outputJSON(result)
+	}
+
 	fmt.Printf("Agent '%s' %s via Hub.\n", agentName, displayStatus)
 	if resp.Agent != nil {
 		fmt.Printf("Agent Slug: %s\n", resp.Agent.Slug)

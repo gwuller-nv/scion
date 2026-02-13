@@ -55,6 +55,10 @@ var configListCmd = &cobra.Command{
 		// Flatten struct for display
 		m := config.GetSettingsMap(effective)
 
+		if isJSONOutput() {
+			return outputJSON(m)
+		}
+
 		// Sort keys
 		keys := make([]string, 0, len(m))
 		for k := range m {
@@ -102,6 +106,20 @@ var configSetCmd = &cobra.Command{
 		if configGlobal {
 			scope = "global"
 		}
+
+		if isJSONOutput() {
+			return outputJSON(ActionResult{
+				Status:  "success",
+				Command: "config set",
+				Message: fmt.Sprintf("Updated %s setting '%s' to '%s'", scope, key, value),
+				Details: map[string]interface{}{
+					"key":   key,
+					"value": value,
+					"scope": scope,
+				},
+			})
+		}
+
 		fmt.Printf("Updated %s setting '%s' to '%s'\n", scope, key, value)
 		return nil
 	},
@@ -125,6 +143,13 @@ var configGetCmd = &cobra.Command{
 		val, err := config.GetSettingValue(settings, key)
 		if err != nil {
 			return err
+		}
+
+		if isJSONOutput() {
+			return outputJSON(map[string]string{
+				"key":   key,
+				"value": val,
+			})
 		}
 
 		fmt.Println(val)

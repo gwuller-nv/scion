@@ -66,8 +66,25 @@ var stopCmd = &cobra.Command{
 			if _, err := mgr.Delete(context.Background(), agentName, true, grovePath, false); err != nil {
 				return err
 			}
+			if isJSONOutput() {
+				return outputJSON(ActionResult{
+					Status:  "success",
+					Command: "stop",
+					Agent:   agentName,
+					Message: fmt.Sprintf("Agent '%s' stopped and removed.", agentName),
+					Details: map[string]interface{}{"removed": true},
+				})
+			}
 			fmt.Printf("Agent '%s' stopped and removed.\n", agentName)
 		} else {
+			if isJSONOutput() {
+				return outputJSON(ActionResult{
+					Status:  "success",
+					Command: "stop",
+					Agent:   agentName,
+					Message: fmt.Sprintf("Agent '%s' stopped.", agentName),
+				})
+			}
 			fmt.Printf("Agent '%s' stopped.\n", agentName)
 		}
 
@@ -76,9 +93,10 @@ var stopCmd = &cobra.Command{
 }
 
 func stopAgentViaHub(hubCtx *HubContext, agentName string) error {
-	PrintUsingHub(hubCtx.Endpoint)
-
-	fmt.Printf("Stopping agent '%s'...\n", agentName)
+	if !isJSONOutput() {
+		PrintUsingHub(hubCtx.Endpoint)
+		fmt.Printf("Stopping agent '%s'...\n", agentName)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -104,8 +122,26 @@ func stopAgentViaHub(hubCtx *HubContext, agentName string) error {
 		if err := agentSvc.Delete(ctx, agentName, opts); err != nil {
 			return wrapHubError(fmt.Errorf("agent stopped but failed to delete via Hub: %w", err))
 		}
+		if isJSONOutput() {
+			return outputJSON(ActionResult{
+				Status:  "success",
+				Command: "stop",
+				Agent:   agentName,
+				Message: fmt.Sprintf("Agent '%s' stopped and removed via Hub.", agentName),
+				Details: map[string]interface{}{"removed": true, "hub": true},
+			})
+		}
 		fmt.Printf("Agent '%s' stopped and removed via Hub.\n", agentName)
 	} else {
+		if isJSONOutput() {
+			return outputJSON(ActionResult{
+				Status:  "success",
+				Command: "stop",
+				Agent:   agentName,
+				Message: fmt.Sprintf("Agent '%s' stopped via Hub.", agentName),
+				Details: map[string]interface{}{"hub": true},
+			})
+		}
 		fmt.Printf("Agent '%s' stopped via Hub.\n", agentName)
 	}
 

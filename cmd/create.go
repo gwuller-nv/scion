@@ -92,6 +92,14 @@ arguments are provided, an empty prompt.md is created for later editing.`,
 			return err
 		}
 
+		if isJSONOutput() {
+			return outputJSON(ActionResult{
+				Status:  "success",
+				Command: "create",
+				Agent:   agentName,
+				Message: fmt.Sprintf("Agent '%s' created successfully.", agentName),
+			})
+		}
 		fmt.Printf("Agent '%s' created successfully.\n", agentName)
 		return nil
 	},
@@ -151,7 +159,31 @@ func createAgentViaHub(hubCtx *HubContext, agentName string, task string) error 
 	}
 
 	// Print info line when broker was auto-resolved (not explicitly specified)
-	printAutoResolvedBroker(ctx, hubCtx, runtimeBrokerID, req.RuntimeBrokerID, resp)
+	if !isJSONOutput() {
+		printAutoResolvedBroker(ctx, hubCtx, runtimeBrokerID, req.RuntimeBrokerID, resp)
+	}
+
+	if isJSONOutput() {
+		result := ActionResult{
+			Status:   "success",
+			Command:  "create",
+			Agent:    agentName,
+			Message:  fmt.Sprintf("Agent '%s' created via Hub.", agentName),
+			Warnings: resp.Warnings,
+			Details:  map[string]interface{}{},
+		}
+		if resp.Agent != nil {
+			result.Details["slug"] = resp.Agent.Slug
+			result.Details["status"] = resp.Agent.Status
+			if resp.Agent.RuntimeBrokerID != "" {
+				result.Details["runtimeBrokerId"] = resp.Agent.RuntimeBrokerID
+			}
+			if resp.Agent.RuntimeBrokerName != "" {
+				result.Details["runtimeBrokerName"] = resp.Agent.RuntimeBrokerName
+			}
+		}
+		return outputJSON(result)
+	}
 
 	if resp.Agent != nil {
 		brokerInfo := ""

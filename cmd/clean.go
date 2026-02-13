@@ -178,6 +178,19 @@ func runClean(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to remove grove directory: %w", err)
 	}
 
+	if isJSONOutput() {
+		return outputJSON(ActionResult{
+			Status:  "success",
+			Command: "clean",
+			Message: fmt.Sprintf("Grove '%s' has been removed.", groveName),
+			Details: map[string]interface{}{
+				"grove":  groveName,
+				"path":   resolvedPath,
+				"global": isGlobal,
+			},
+		})
+	}
+
 	fmt.Println()
 	fmt.Printf("Grove '%s' has been removed.\n", groveName)
 	if isGlobal {

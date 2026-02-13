@@ -108,9 +108,11 @@ return an error instead of blocking.`,
 			if outputFormat != "json" && outputFormat != "plain" {
 				return fmt.Errorf("invalid format: %s (allowed: json, plain)", outputFormat)
 			}
-			if cmd != listCmd {
-				// TODO: support format for other commands
-				return fmt.Errorf("format flag is not yet supported for command %s", cmd.Name())
+			// Reject --format json for interactive/streaming commands
+			if outputFormat == "json" {
+				if reason, ok := interactiveOnlyCommands[cmd.CommandPath()]; ok {
+					return fmt.Errorf("--format json is not supported for '%s' because %s", cmd.CommandPath(), reason)
+				}
 			}
 		}
 
