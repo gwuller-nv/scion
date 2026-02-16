@@ -1343,6 +1343,107 @@ func TestRuntimeBrokerListByName(t *testing.T) {
 	}
 }
 
+func TestRuntimeBrokerDeleteCascadesProviders(t *testing.T) {
+	srv, s := testServer(t)
+	ctx := context.Background()
+
+	// Create a broker
+	broker := &store.RuntimeBroker{
+		ID:      "broker_cascade_test",
+		Name:    "Cascade Test Broker",
+		Slug:    "cascade-test-broker",
+		Status:  store.BrokerStatusOnline,
+		Created: time.Now(),
+		Updated: time.Now(),
+	}
+	if err := s.CreateRuntimeBroker(ctx, broker); err != nil {
+		t.Fatalf("failed to create runtime broker: %v", err)
+	}
+
+	// Create two groves, one with default_runtime_broker_id pointing to this broker
+	grove1 := &store.Grove{
+		ID:                     "grove_cascade_1",
+		Name:                   "Cascade Grove 1",
+		Slug:                   "cascade-grove-1",
+		DefaultRuntimeBrokerID: broker.ID,
+		Created:                time.Now(),
+		Updated:                time.Now(),
+	}
+	grove2 := &store.Grove{
+		ID:      "grove_cascade_2",
+		Name:    "Cascade Grove 2",
+		Slug:    "cascade-grove-2",
+		Created: time.Now(),
+		Updated: time.Now(),
+	}
+	if err := s.CreateGrove(ctx, grove1); err != nil {
+		t.Fatalf("failed to create grove 1: %v", err)
+	}
+	if err := s.CreateGrove(ctx, grove2); err != nil {
+		t.Fatalf("failed to create grove 2: %v", err)
+	}
+
+	// Add broker as provider to both groves
+	for _, groveID := range []string{grove1.ID, grove2.ID} {
+		provider := &store.GroveProvider{
+			GroveID:    groveID,
+			BrokerID:   broker.ID,
+			BrokerName: broker.Name,
+			Status:     store.BrokerStatusOnline,
+		}
+		if err := s.AddGroveProvider(ctx, provider); err != nil {
+			t.Fatalf("failed to add grove provider for %s: %v", groveID, err)
+		}
+	}
+
+	// Verify providers exist before deletion
+	providers1, err := s.GetGroveProviders(ctx, grove1.ID)
+	if err != nil {
+		t.Fatalf("failed to get providers for grove 1: %v", err)
+	}
+	if len(providers1) != 1 {
+		t.Fatalf("expected 1 provider for grove 1, got %d", len(providers1))
+	}
+
+	// Delete the broker via the API
+	rec := doRequest(t, srv, http.MethodDelete, "/api/v1/runtime-brokers/"+broker.ID, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify the broker is gone
+	_, err = s.GetRuntimeBroker(ctx, broker.ID)
+	if err == nil {
+		t.Error("expected broker to be deleted, but it still exists")
+	}
+
+	// Verify provider records are gone from both groves
+	providers1, err = s.GetGroveProviders(ctx, grove1.ID)
+	if err != nil {
+		t.Fatalf("failed to get providers for grove 1 after deletion: %v", err)
+	}
+	if len(providers1) != 0 {
+		t.Errorf("expected 0 providers for grove 1 after broker deletion, got %d", len(providers1))
+	}
+
+	providers2, err := s.GetGroveProviders(ctx, grove2.ID)
+	if err != nil {
+		t.Fatalf("failed to get providers for grove 2 after deletion: %v", err)
+	}
+	if len(providers2) != 0 {
+		t.Errorf("expected 0 providers for grove 2 after broker deletion, got %d", len(providers2))
+	}
+
+	// Verify default_runtime_broker_id was cleared on grove1
+	g1, err := s.GetGrove(ctx, grove1.ID)
+	if err != nil {
+		t.Fatalf("failed to get grove 1 after deletion: %v", err)
+	}
+	if g1.DefaultRuntimeBrokerID != "" {
+		t.Errorf("expected default_runtime_broker_id to be cleared on grove 1, got %q", g1.DefaultRuntimeBrokerID)
+	}
+}
+
 func TestRuntimeBrokerGetByID(t *testing.T) {
 	srv, s := testServer(t)
 	ctx := context.Background()

@@ -2387,13 +2387,33 @@ func (s *Server) deleteRuntimeBroker(w http.ResponseWriter, r *http.Request, id 
 		brokerName = broker.Name
 	}
 
+	// Explicitly remove all grove provider records for this broker.
+	// While the DB schema has ON DELETE CASCADE, we do this at the
+	// application level to ensure cleanup regardless of DB behavior
+	// and to clear default_runtime_broker_id on affected groves.
+	clientIP := getClientIP(r)
+	if groves, err := s.store.GetBrokerGroves(ctx, id); err == nil {
+		for _, gp := range groves {
+			_ = s.store.RemoveGroveProvider(ctx, gp.GroveID, id)
+			LogUnlinkEvent(ctx, s.auditLogger, id, gp.GroveID, actorID, clientIP)
+
+			// Clear default_runtime_broker_id if it points to this broker
+			if grove, err := s.store.GetGrove(ctx, gp.GroveID); err == nil {
+				if grove.DefaultRuntimeBrokerID == id {
+					grove.DefaultRuntimeBrokerID = ""
+					_ = s.store.UpdateGrove(ctx, grove)
+				}
+			}
+		}
+	}
+
 	if err := s.store.DeleteRuntimeBroker(ctx, id); err != nil {
 		writeErrorFromErr(w, err, "")
 		return
 	}
 
 	// Log the deregistration event
-	LogDeregisterEvent(ctx, s.auditLogger, id, brokerName, actorID, getClientIP(r))
+	LogDeregisterEvent(ctx, s.auditLogger, id, brokerName, actorID, clientIP)
 
 	w.WriteHeader(http.StatusNoContent)
 }
