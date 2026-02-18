@@ -69,7 +69,7 @@ func DeleteAgentFiles(agentName string, grovePath string, removeBranch bool) (bo
 		agentWorkspace := filepath.Join(agentDir, "workspace")
 		// Check if it's a worktree before trying to remove it
 		if _, err := os.Stat(filepath.Join(agentWorkspace, ".git")); err == nil {
-			util.Debugf("delete: removing git worktree at %s", agentWorkspace)
+			util.Debugf("delete: removing workspace at %s", agentWorkspace)
 			worktreeStart := time.Now()
 			if deleted, err := util.RemoveWorktree(agentWorkspace, removeBranch); err == nil {
 				if deleted {

@@ -232,6 +232,26 @@ func TestGitUtils(t *testing.T) {
 		_, _ = RemoveWorktree(wtPath, true)
 	})
 
+	t.Run("RemoveWorktreeWithBranch", func(t *testing.T) {
+		wtPath := filepath.Join(repoDir, "wt-rm-branch")
+		branch := "rm-branch-test"
+
+		if err := CreateWorktree(wtPath, branch); err != nil {
+			t.Fatalf("CreateWorktree failed: %v", err)
+		}
+
+		deleted, err := RemoveWorktree(wtPath, true)
+		if err != nil {
+			t.Fatalf("RemoveWorktree failed: %v", err)
+		}
+		if !deleted {
+			t.Error("expected branch to be deleted")
+		}
+		if BranchExists(branch) {
+			t.Error("branch still exists after RemoveWorktree with deleteBranch=true")
+		}
+	})
+
 	t.Run("CompareGitVersion", func(t *testing.T) {
 		tests := []struct {
 			version string

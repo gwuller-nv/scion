@@ -188,6 +188,63 @@ func TestRemoveAllSafe_BasicTree(t *testing.T) {
 	}
 }
 
+func TestRemoveSymlinkSafe(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Run("removes dangling symlink", func(t *testing.T) {
+		link := filepath.Join(tmpDir, "dangling-link")
+		if err := os.Symlink("/home/scion/.claude/debug/test.txt", link); err != nil {
+			t.Fatal(err)
+		}
+		removeSymlinkSafe(link)
+		if _, err := os.Lstat(link); !os.IsNotExist(err) {
+			t.Error("expected dangling symlink to be removed")
+		}
+	})
+
+	t.Run("removes valid symlink", func(t *testing.T) {
+		target := filepath.Join(tmpDir, "real-target")
+		if err := os.WriteFile(target, []byte("data"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(tmpDir, "valid-link")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		removeSymlinkSafe(link)
+		if _, err := os.Lstat(link); !os.IsNotExist(err) {
+			t.Error("expected valid symlink to be removed")
+		}
+		// Target should still exist.
+		if _, err := os.Stat(target); err != nil {
+			t.Error("expected symlink target to still exist")
+		}
+	})
+
+	t.Run("leaves no temp files behind", func(t *testing.T) {
+		subDir := filepath.Join(tmpDir, "clean-check")
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(subDir, "link")
+		if err := os.Symlink("/nonexistent/path", link); err != nil {
+			t.Fatal(err)
+		}
+		removeSymlinkSafe(link)
+		entries, err := os.ReadDir(subDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 0 {
+			names := make([]string, len(entries))
+			for i, e := range entries {
+				names[i] = e.Name()
+			}
+			t.Errorf("expected empty directory, found: %v", names)
+		}
+	})
+}
+
 func TestRemoveAllSafe_WithDanglingSymlinks(t *testing.T) {
 	tmpDir := t.TempDir()
 	target := filepath.Join(tmpDir, "agent-dir")

@@ -120,12 +120,15 @@ func RemoveAllAsync(path string) error {
 //  2. Regular files collected during the walk are deleted.
 //  3. Directories are removed bottom-up (deepest first).
 //
-// Stripping symlinks during phase 1 prevents macOS autofs from attempting
-// to resolve dangling container-internal symlink targets (e.g.
-// /home/scion/...) during the subsequent unlink calls.
+// Symlink removal uses removeSymlinkSafe which avoids triggering macOS
+// autofs timeouts on dangling symlinks pointing to container-internal
+// paths (e.g. /home/scion/...).
 func removeAllSafe(root string) error {
+	Debugf("removeAllSafe: starting removal of %s", root)
+	start := time.Now()
 	var files []string
 	var dirs []string
+	var symlinkCount int
 	var firstErr error
 
 	walkErr := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -140,7 +143,8 @@ func removeAllSafe(root string) error {
 						return nil // skip this entry
 					}
 					if info.Mode()&os.ModeSymlink != 0 {
-						os.Remove(path)
+						removeSymlinkSafe(path)
+						symlinkCount++
 						return nil
 					}
 					if info.IsDir() {
@@ -158,10 +162,8 @@ func removeAllSafe(root string) error {
 		if d.Type()&os.ModeSymlink != 0 {
 			// Remove symlinks immediately during the walk to prevent
 			// any later operation from touching their targets.
-			if rmErr := os.Remove(path); rmErr != nil && os.IsPermission(rmErr) {
-				os.Chmod(filepath.Dir(path), 0700)
-				os.Remove(path)
-			}
+			removeSymlinkSafe(path)
+			symlinkCount++
 			return nil
 		}
 
@@ -181,6 +183,7 @@ func removeAllSafe(root string) error {
 	if walkErr != nil && firstErr == nil {
 		firstErr = walkErr
 	}
+	Debugf("removeAllSafe: walk completed in %v (symlinks: %d, files: %d, dirs: %d)", time.Since(start), symlinkCount, len(files), len(dirs))
 
 	// Phase 2: remove regular files.
 	for _, f := range files {
@@ -209,8 +212,51 @@ func removeAllSafe(root string) error {
 			}
 		}
 	}
+	Debugf("removeAllSafe: completed in %v", time.Since(start))
 
 	return firstErr
+}
+
+// removeSymlinkSafe removes a symlink without triggering macOS autofs.
+//
+// On macOS, calling unlink() on a symlink whose target is under an autofs
+// mount (e.g. /home/scion/...) can trigger the automounter, causing a
+// multi-second timeout while macOS tries to resolve the nonexistent
+// container-internal path.
+//
+// This function works around the issue by atomically replacing the symlink
+// directory entry with an empty regular file via rename(2), then removing
+// the regular file. Since rename() operates purely on directory entries
+// without resolving symlink targets, it avoids triggering autofs.
+func removeSymlinkSafe(path string) {
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, ".symrm.*")
+	if err != nil {
+		// Fallback: try direct removal if we can't create a temp file.
+		if rmErr := os.Remove(path); rmErr != nil && os.IsPermission(rmErr) {
+			os.Chmod(dir, 0700)
+			os.Remove(path)
+		}
+		return
+	}
+	tmp := f.Name()
+	f.Close()
+
+	// Atomically replace the symlink with the empty regular file.
+	// This eliminates the symlink directory entry without the kernel
+	// needing to inspect or resolve the symlink target.
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		// Fallback: direct removal.
+		if rmErr := os.Remove(path); rmErr != nil && os.IsPermission(rmErr) {
+			os.Chmod(dir, 0700)
+			os.Remove(path)
+		}
+		return
+	}
+
+	// Now path is a regular empty file — remove it without autofs concerns.
+	os.Remove(path)
 }
 
 // CleanupPendingDeletions removes leftover tombstone directories in dir
