@@ -639,6 +639,162 @@ func TestBuildAgentEnv_TelemetryInjection(t *testing.T) {
 	}
 }
 
+func TestTelemetryEnabledFlag(t *testing.T) {
+	// Verify the TelemetryEnabled derivation logic used in Start().
+	// telemetryEnabled = cfg != nil && cfg.Telemetry != nil &&
+	//   (cfg.Telemetry.Enabled == nil || *cfg.Telemetry.Enabled)
+
+	boolPtr := func(b bool) *bool { return &b }
+
+	tests := []struct {
+		name     string
+		cfg      *api.ScionConfig
+		expected bool
+	}{
+		{
+			name:     "nil config",
+			cfg:      nil,
+			expected: false,
+		},
+		{
+			name:     "nil telemetry",
+			cfg:      &api.ScionConfig{},
+			expected: false,
+		},
+		{
+			name:     "telemetry enabled nil (default on)",
+			cfg:      &api.ScionConfig{Telemetry: &api.TelemetryConfig{}},
+			expected: true,
+		},
+		{
+			name:     "telemetry explicitly enabled",
+			cfg:      &api.ScionConfig{Telemetry: &api.TelemetryConfig{Enabled: boolPtr(true)}},
+			expected: true,
+		},
+		{
+			name:     "telemetry explicitly disabled",
+			cfg:      &api.ScionConfig{Telemetry: &api.TelemetryConfig{Enabled: boolPtr(false)}},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.cfg != nil && tt.cfg.Telemetry != nil &&
+				(tt.cfg.Telemetry.Enabled == nil || *tt.cfg.Telemetry.Enabled)
+			if result != tt.expected {
+				t.Errorf("telemetryEnabled = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestTelemetryEnabledRunConfig(t *testing.T) {
+	// Integration test: verify that harness telemetry env vars appear in
+	// RunConfig when telemetry is enabled, and are absent when disabled.
+	tmpDir := t.TempDir()
+
+	oldWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldWd)
+
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+	os.Setenv("HOME", tmpDir)
+
+	globalScionDir := filepath.Join(tmpDir, ".scion")
+
+	// Create harness-config
+	hcDir := filepath.Join(globalScionDir, "harness-configs", "test-harness")
+	os.MkdirAll(hcDir, 0755)
+	os.WriteFile(filepath.Join(hcDir, "config.yaml"), []byte("harness: gemini\nuser: scion\nimage: test-image:latest\n"), 0644)
+
+	// Create template
+	tplDir := filepath.Join(globalScionDir, "templates", "default")
+	os.MkdirAll(tplDir, 0755)
+	os.WriteFile(filepath.Join(tplDir, "scion-agent.json"), []byte(`{"default_harness_config": "test-harness"}`), 0644)
+
+	os.WriteFile(filepath.Join(globalScionDir, "settings.yaml"), []byte(`schema_version: "1"
+active_profile: local
+profiles:
+  local:
+    runtime: docker
+`), 0644)
+
+	projectDir := filepath.Join(tmpDir, "project")
+	projectScionDir := filepath.Join(projectDir, ".scion")
+	os.MkdirAll(projectScionDir, 0755)
+
+	t.Run("telemetry enabled passes TelemetryEnabled to RunConfig", func(t *testing.T) {
+		var capturedConfig runtime.RunConfig
+		mockRT := &runtime.MockRuntime{
+			ListFunc: func(ctx context.Context, labelFilter map[string]string) ([]api.AgentInfo, error) {
+				return []api.AgentInfo{}, nil
+			},
+			RunFunc: func(ctx context.Context, config runtime.RunConfig) (string, error) {
+				capturedConfig = config
+				return "mock-id", nil
+			},
+		}
+
+		// Create agent with telemetry enabled in scion-agent.json
+		agentDir := filepath.Join(projectScionDir, "agents", "telem-on")
+		os.MkdirAll(filepath.Join(agentDir, "home"), 0755)
+		os.WriteFile(filepath.Join(agentDir, "scion-agent.json"), []byte(`{
+			"harness": "gemini",
+			"telemetry": {"enabled": true}
+		}`), 0644)
+
+		mgr := NewManager(mockRT)
+		_, err := mgr.Start(context.Background(), api.StartOptions{
+			Name:      "telem-on",
+			GrovePath: projectScionDir,
+			NoAuth:    true,
+		})
+		if err != nil {
+			t.Fatalf("Start failed: %v", err)
+		}
+
+		if !capturedConfig.TelemetryEnabled {
+			t.Error("expected TelemetryEnabled = true, got false")
+		}
+	})
+
+	t.Run("telemetry disabled omits TelemetryEnabled from RunConfig", func(t *testing.T) {
+		var capturedConfig runtime.RunConfig
+		mockRT := &runtime.MockRuntime{
+			ListFunc: func(ctx context.Context, labelFilter map[string]string) ([]api.AgentInfo, error) {
+				return []api.AgentInfo{}, nil
+			},
+			RunFunc: func(ctx context.Context, config runtime.RunConfig) (string, error) {
+				capturedConfig = config
+				return "mock-id", nil
+			},
+		}
+
+		agentDir := filepath.Join(projectScionDir, "agents", "telem-off")
+		os.MkdirAll(filepath.Join(agentDir, "home"), 0755)
+		os.WriteFile(filepath.Join(agentDir, "scion-agent.json"), []byte(`{
+			"harness": "gemini",
+			"telemetry": {"enabled": false}
+		}`), 0644)
+
+		mgr := NewManager(mockRT)
+		_, err := mgr.Start(context.Background(), api.StartOptions{
+			Name:      "telem-off",
+			GrovePath: projectScionDir,
+			NoAuth:    true,
+		})
+		if err != nil {
+			t.Fatalf("Start failed: %v", err)
+		}
+
+		if capturedConfig.TelemetryEnabled {
+			t.Error("expected TelemetryEnabled = false, got true")
+		}
+	})
+}
+
 func TestBuildAgentEnv_TelemetryNoOverrideExplicit(t *testing.T) {
 	// Explicit opts.Env values must not be overwritten by telemetry config.
 	enabled := true

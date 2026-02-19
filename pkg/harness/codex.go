@@ -115,6 +115,12 @@ func (c *Codex) GetHarnessEmbedsFS() (embed.FS, string) {
 	return codexEmbeds.EmbedsFS, "embeds"
 }
 
+func (c *Codex) GetTelemetryEnv() map[string]string {
+	// Codex uses a TOML config file for telemetry, not env vars.
+	// File-based injection is handled via PropagateFiles.
+	return nil
+}
+
 func (c *Codex) InjectAgentInstructions(agentHome string, content []byte) error {
 	target := filepath.Join(agentHome, "AGENTS.md")
 	return os.WriteFile(target, content, 0644)

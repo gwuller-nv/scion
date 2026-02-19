@@ -200,6 +200,11 @@ func buildCommonRunArgs(config RunConfig) ([]string, error) {
 		for k, v := range config.Harness.GetEnv(config.Name, config.HomeDir, config.UnixUsername, config.Auth) {
 			addEnv(k, v)
 		}
+		if config.TelemetryEnabled {
+			for k, v := range config.Harness.GetTelemetryEnv() {
+				addEnv(k, v)
+			}
+		}
 	}
 
 	// Pass host user UID/GID for container user synchronization

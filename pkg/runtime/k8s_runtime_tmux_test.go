@@ -51,6 +51,7 @@ func (m *MockHarness) GetInterruptKey() string                { return "C-c" }
 func (m *MockHarness) GetHarnessEmbedsFS() (embed.FS, string) { return embed.FS{}, "" }
 func (m *MockHarness) InjectAgentInstructions(agentHome string, content []byte) error { return nil }
 func (m *MockHarness) InjectSystemPrompt(agentHome string, content []byte) error      { return nil }
+func (m *MockHarness) GetTelemetryEnv() map[string]string                             { return nil }
 
 func TestKubernetesRuntime_Run_Tmux(t *testing.T) {
 	// Setup

@@ -162,6 +162,17 @@ func (c *ClaudeCode) InjectAgentInstructions(agentHome string, content []byte) e
 	return os.WriteFile(target, content, 0644)
 }
 
+func (c *ClaudeCode) GetTelemetryEnv() map[string]string {
+	return map[string]string{
+		"CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+		"OTEL_METRICS_EXPORTER":        "otlp",
+		"OTEL_LOGS_EXPORTER":           "otlp",
+		"OTEL_EXPORTER_OTLP_PROTOCOL":  "grpc",
+		"OTEL_EXPORTER_OTLP_ENDPOINT":  "http://localhost:4317",
+		"OTEL_METRIC_EXPORT_INTERVAL":  "30000",
+	}
+}
+
 func (c *ClaudeCode) InjectSystemPrompt(agentHome string, content []byte) error {
 	// System prompt is not yet supported for the Claude harness.
 	return nil

@@ -53,4 +53,9 @@ type Harness interface {
 	// prompt support write to their expected location. Harnesses without it merge the
 	// content into agent instructions (downgrade).
 	InjectSystemPrompt(agentHome string, content []byte) error
+
+	// GetTelemetryEnv returns harness-specific environment variables that direct
+	// the harness's native telemetry output to the local OTLP collector
+	// (localhost:4317). These are injected only when telemetry is enabled.
+	GetTelemetryEnv() map[string]string
 }

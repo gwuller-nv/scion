@@ -336,17 +336,22 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 		repoRoot, _ = util.RepoRootDir(projectDir)
 	}
 
+	// Telemetry defaults to enabled when not explicitly set to false.
+	telemetryEnabled := finalScionCfg != nil && finalScionCfg.Telemetry != nil &&
+		(finalScionCfg.Telemetry.Enabled == nil || *finalScionCfg.Telemetry.Enabled)
+
 	runCfg := runtime.RunConfig{
-		Name:         opts.Name,
-		Template:     template,
-		UnixUsername: unixUsername,
-		Image:        resolvedImage,
-		HomeDir:      agentHome,
-		Workspace:    effectiveWorkspace,
-		RepoRoot:     repoRoot,
-		Auth:         auth,
-		Harness:      h,
-		Task:         task,
+		Name:             opts.Name,
+		Template:         template,
+		UnixUsername:     unixUsername,
+		Image:            resolvedImage,
+		HomeDir:          agentHome,
+		Workspace:        effectiveWorkspace,
+		RepoRoot:         repoRoot,
+		Auth:             auth,
+		Harness:          h,
+		TelemetryEnabled: telemetryEnabled,
+		Task:             task,
 		CommandArgs: func() []string {
 			var args []string
 			if finalScionCfg != nil {

@@ -111,6 +111,35 @@ func TestGeminiDiscoverAuth(t *testing.T) {
 	}
 }
 
+func TestGeminiGetTelemetryEnv(t *testing.T) {
+	g := &GeminiCLI{}
+	env := g.GetTelemetryEnv()
+
+	expected := map[string]string{
+		"GEMINI_TELEMETRY_ENABLED":       "true",
+		"GEMINI_TELEMETRY_TARGET":        "local",
+		"GEMINI_TELEMETRY_USE_COLLECTOR": "true",
+		"GEMINI_TELEMETRY_OTLP_ENDPOINT": "http://localhost:4317",
+		"GEMINI_TELEMETRY_OTLP_PROTOCOL": "grpc",
+		"GEMINI_TELEMETRY_LOG_PROMPTS":   "false",
+	}
+
+	if len(env) != len(expected) {
+		t.Fatalf("expected %d env vars, got %d: %v", len(expected), len(env), env)
+	}
+
+	for k, want := range expected {
+		got, ok := env[k]
+		if !ok {
+			t.Errorf("missing env var %s", k)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+}
+
 func TestGeminiInjectAgentInstructions(t *testing.T) {
 	agentHome := t.TempDir()
 	g := &GeminiCLI{}

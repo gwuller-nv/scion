@@ -117,6 +117,11 @@ func (o *OpenCode) GetHarnessEmbedsFS() (embed.FS, string) {
 	return opencodeEmbeds.EmbedsFS, "embeds"
 }
 
+func (o *OpenCode) GetTelemetryEnv() map[string]string {
+	// OpenCode telemetry env var injection is deferred.
+	return nil
+}
+
 func (o *OpenCode) InjectAgentInstructions(agentHome string, content []byte) error {
 	target := filepath.Join(agentHome, "AGENTS.md")
 	return os.WriteFile(target, content, 0644)

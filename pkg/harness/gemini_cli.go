@@ -385,6 +385,17 @@ func (g *GeminiCLI) InjectAgentInstructions(agentHome string, content []byte) er
 	return os.WriteFile(target, content, 0644)
 }
 
+func (g *GeminiCLI) GetTelemetryEnv() map[string]string {
+	return map[string]string{
+		"GEMINI_TELEMETRY_ENABLED":       "true",
+		"GEMINI_TELEMETRY_TARGET":        "local",
+		"GEMINI_TELEMETRY_USE_COLLECTOR": "true",
+		"GEMINI_TELEMETRY_OTLP_ENDPOINT": "http://localhost:4317",
+		"GEMINI_TELEMETRY_OTLP_PROTOCOL": "grpc",
+		"GEMINI_TELEMETRY_LOG_PROMPTS":   "false",
+	}
+}
+
 func (g *GeminiCLI) InjectSystemPrompt(agentHome string, content []byte) error {
 	target := filepath.Join(agentHome, ".gemini", "system_prompt.md")
 	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {

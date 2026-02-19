@@ -179,6 +179,10 @@ func (g *Generic) GetHarnessEmbedsFS() (embed.FS, string) {
 	return embed.FS{}, ""
 }
 
+func (g *Generic) GetTelemetryEnv() map[string]string {
+	return nil
+}
+
 func (g *Generic) InjectAgentInstructions(agentHome string, content []byte) error {
 	target := filepath.Join(agentHome, "agents.md")
 	return os.WriteFile(target, content, 0644)

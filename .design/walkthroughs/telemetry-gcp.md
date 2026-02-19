@@ -166,9 +166,32 @@ SCION_TELEMETRY_CLOUD_BATCH_MAX_SIZE=256
 SCION_TELEMETRY_CLOUD_BATCH_TIMEOUT=5s
 ```
 
+Also verify harness-specific telemetry env vars are present. These direct
+the harness's native telemetry to the local OTLP collector:
+
+```bash
+docker inspect qa-telem --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | grep -E "GEMINI_TELEMETRY"
+```
+
+**Expected output** (for Gemini harness):
+
+```
+GEMINI_TELEMETRY_ENABLED=true
+GEMINI_TELEMETRY_TARGET=local
+GEMINI_TELEMETRY_USE_COLLECTOR=true
+GEMINI_TELEMETRY_OTLP_ENDPOINT=http://localhost:4317
+GEMINI_TELEMETRY_OTLP_PROTOCOL=grpc
+GEMINI_TELEMETRY_LOG_PROMPTS=false
+```
+
+For Claude harness agents, check for `CLAUDE_CODE_ENABLE_TELEMETRY=1` and
+`OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317` instead.
+
 **Key verification points:**
 
 - Settings-level telemetry fields appear as container env vars.
+- Harness-specific telemetry env vars are injected when telemetry is enabled.
 - The `GCP_PROJECT` env var (if needed via `SCION_GCP_PROJECT_ID`) is only
   required when using project-scoped Cloud Trace endpoints; the standard
   `cloudtrace.googleapis.com:443` endpoint infers the project from ADC.

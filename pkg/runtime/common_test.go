@@ -352,6 +352,39 @@ func TestBuildCommonRunArgs(t *testing.T) {
 			},
 		},
 		{
+			name: "telemetry enabled injects harness telemetry env",
+			config: RunConfig{
+				Harness:          &harness.GeminiCLI{},
+				Name:             "test-agent",
+				UnixUsername:     "scion",
+				Image:            "scion-agent:latest",
+				TelemetryEnabled: true,
+			},
+			wantIn: []string{
+				"-e GEMINI_TELEMETRY_ENABLED=true",
+				"-e GEMINI_TELEMETRY_TARGET=local",
+				"-e GEMINI_TELEMETRY_USE_COLLECTOR=true",
+				"-e GEMINI_TELEMETRY_OTLP_ENDPOINT=http://localhost:4317",
+				"-e GEMINI_TELEMETRY_OTLP_PROTOCOL=grpc",
+				"-e GEMINI_TELEMETRY_LOG_PROMPTS=false",
+			},
+		},
+		{
+			name: "telemetry disabled omits harness telemetry env",
+			config: RunConfig{
+				Harness:          &harness.GeminiCLI{},
+				Name:             "test-agent",
+				UnixUsername:     "scion",
+				Image:            "scion-agent:latest",
+				TelemetryEnabled: false,
+			},
+			wantOut: []string{
+				"GEMINI_TELEMETRY_ENABLED",
+				"GEMINI_TELEMETRY_TARGET",
+				"GEMINI_TELEMETRY_OTLP_ENDPOINT",
+			},
+		},
+		{
 			name: "git clone mode with home dir still mounts home",
 			config: RunConfig{
 				Harness:      &harness.GeminiCLI{},

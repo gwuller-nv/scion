@@ -115,6 +115,35 @@ func TestClaudeCode_Provision(t *testing.T) {
 	}
 }
 
+func TestClaudeCode_GetTelemetryEnv(t *testing.T) {
+	c := &ClaudeCode{}
+	env := c.GetTelemetryEnv()
+
+	expected := map[string]string{
+		"CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+		"OTEL_METRICS_EXPORTER":        "otlp",
+		"OTEL_LOGS_EXPORTER":           "otlp",
+		"OTEL_EXPORTER_OTLP_PROTOCOL":  "grpc",
+		"OTEL_EXPORTER_OTLP_ENDPOINT":  "http://localhost:4317",
+		"OTEL_METRIC_EXPORT_INTERVAL":  "30000",
+	}
+
+	if len(env) != len(expected) {
+		t.Fatalf("expected %d env vars, got %d: %v", len(expected), len(env), env)
+	}
+
+	for k, want := range expected {
+		got, ok := env[k]
+		if !ok {
+			t.Errorf("missing env var %s", k)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+}
+
 func TestClaudeInjectAgentInstructions(t *testing.T) {
 	agentHome := t.TempDir()
 	c := &ClaudeCode{}

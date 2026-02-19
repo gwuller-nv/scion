@@ -37,8 +37,9 @@ type RunConfig struct {
 	Harness         api.Harness
 	Task            string
 	CommandArgs     []string
-	Resume          bool
-	Resources       *api.ResourceSpec
+	Resume           bool
+	TelemetryEnabled bool
+	Resources        *api.ResourceSpec
 	Kubernetes      *api.KubernetesConfig
 	GitClone        *api.GitCloneConfig
 }
