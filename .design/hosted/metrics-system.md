@@ -1252,31 +1252,33 @@ a full end-to-end QA test of the telemetry system can be executed. Last reviewed
 
 ### 13.1 Settings → Container Environment Bridge
 
-**Status:** Not implemented
-**Blocks:** QA of settings-driven telemetry configuration
+**Status:** Complete
+**Implemented:** 2026-02-19
 
-The settings schema (section 10.3) defines a `telemetry` block that merges across
-global, grove, template, and agent scopes. The sciontool telemetry pipeline reads
-its configuration from `SCION_TELEMETRY_*` and `SCION_OTEL_*` environment variables
-via `telemetry.LoadConfig()`. However, there is no code that converts the resolved
-telemetry settings into environment variables for injection into agent containers.
+Two conversion functions in `pkg/config/telemetry_convert.go` bridge the gap:
 
-**Current state:**
-- `pkg/agent/run.go` `Start()` assembles `opts.Env` with identity vars
-  (`SCION_AGENT_NAME`, `SCION_HUB_ENDPOINT`, etc.) but has no telemetry awareness.
-- `pkg/agent/provision.go` loads settings and merges scion-config but never reads
-  `V1TelemetryConfig` or `ScionConfig.Telemetry`.
-- Telemetry only works if env vars are set manually on the host, via Hub injection,
-  or in the harness config `env` map.
+- `ConvertV1TelemetryToAPI()` — converts settings-level `V1TelemetryConfig` to
+  `api.TelemetryConfig` with nil-safe field-by-field copy.
+- `TelemetryConfigToEnv()` — converts a resolved `api.TelemetryConfig` into a
+  `map[string]string` of `SCION_TELEMETRY_*` / `SCION_OTEL_*` env vars, emitting
+  only non-nil/non-zero fields.
 
-**Required work:**
-- [ ] In `pkg/agent/run.go`, after hub endpoint injection (~line 251), read the
-  resolved telemetry config from settings and/or the merged `ScionConfig.Telemetry`
-  and emit the corresponding `SCION_TELEMETRY_*` / `SCION_OTEL_*` env vars into
-  `opts.Env`. Respect last-write-wins: values already present in `opts.Env` (from
-  harness config, profile, or explicit user env) should not be overwritten.
-- [ ] Add tests in `pkg/agent/run_test.go` verifying that telemetry settings
-  produce the correct container env vars.
+Integration points:
+
+- `pkg/agent/provision.go` — settings telemetry is set on `settingsCfg.Telemetry`
+  before `MergeScionConfig(settingsCfg, finalScionCfg)`, so template/agent-level
+  telemetry fields correctly override settings-level values via the existing
+  `mergeTelemetryConfig` logic.
+- `pkg/agent/run.go` — after hub endpoint injection and before `buildAgentEnv()`,
+  `TelemetryConfigToEnv()` is called and each resulting env var is added to
+  `opts.Env` only if not already present, preserving explicit Hub/broker overrides.
+
+Priority chain (lowest → highest): `scionCfg.Env` (template raw env) →
+telemetry config vars → explicit `opts.Env` (Hub/broker/CLI).
+
+Tests in `pkg/config/telemetry_convert_test.go` (9 cases) and
+`pkg/agent/run_test.go` (2 cases) cover nil handling, full conversion, partial
+structs, bool/CSV/JSON formatting, injection, and override-preservation.
 
 ### 13.2 Hub Metrics Reporting (Milestone 3)
 
@@ -1331,8 +1333,8 @@ The following matrix maps test scenarios to their blocking gaps:
 | Correlated logs emitted with trace context | Ready | — |
 | Gemini session file parsing on session-end | Ready | — |
 | Settings.yaml telemetry merges across scopes (unit) | Ready | — |
-| Settings.yaml telemetry flows into agent container | Blocked | §13.1 |
-| Telemetry disabled at grove scope disables agent collection | Blocked | §13.1 |
+| Settings.yaml telemetry flows into agent container | Ready | — |
+| Telemetry disabled at grove scope disables agent collection | Ready | — |
 | Session metrics reported to Hub on session-end | Blocked | §13.2 |
 | Hub stores and returns metrics via API | Blocked | §13.2, §13.3 |
 | Web UI displays token usage for a session | Blocked | §13.2, §13.3 |
