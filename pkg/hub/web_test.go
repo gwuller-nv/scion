@@ -290,6 +290,9 @@ func TestWebHealthz(t *testing.T) {
 	if !strings.Contains(bodyStr, `"component":"web"`) {
 		t.Errorf("expected component web in response: %s", bodyStr)
 	}
+	if !strings.Contains(bodyStr, `"scionVersion":`) {
+		t.Errorf("expected scionVersion in response: %s", bodyStr)
+	}
 }
 
 func TestIsHashedAsset(t *testing.T) {

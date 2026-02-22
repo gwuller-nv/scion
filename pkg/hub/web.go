@@ -30,6 +30,7 @@ import (
 	"github.com/gorilla/sessions"
 	"github.com/ptone/scion-agent/pkg/apiclient"
 	"github.com/ptone/scion-agent/pkg/store"
+	"github.com/ptone/scion-agent/pkg/version"
 	"github.com/ptone/scion-agent/web"
 )
 
@@ -447,8 +448,8 @@ func (ws *WebServer) registerRoutes() {
 func (ws *WebServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"status":"ok","component":"web","assetsDir":"%s","assetsEmbedded":%t}`,
-		ws.config.AssetsDir, web.AssetsEmbedded)
+	fmt.Fprintf(w, `{"status":"ok","component":"web","assetsDir":"%s","assetsEmbedded":%t,"scionVersion":"%s"}`,
+		ws.config.AssetsDir, web.AssetsEmbedded, version.Short())
 }
 
 // staticHandler returns an http.Handler that serves static assets.
