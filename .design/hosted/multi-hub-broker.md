@@ -1,6 +1,6 @@
 # Multi-Hub Broker Design
 
-**Status:** Revised (feedback incorporated 2026-02-23)
+**Status:** Revised (second feedback round incorporated 2026-02-23)
 **Created:** 2026-02-22
 **Author:** Design Agent
 **Related:** [multi-broker.md](multi-broker.md), [hosted-architecture.md](hosted-architecture.md), [runtime-broker-api.md](runtime-broker-api.md)
@@ -207,7 +207,6 @@ Disadvantages:
 - Overkill if template caches don't actually need separation
 
 **Decision:** Option A (directory-based flat files) for credentials. Template caches can be shared since they're content-addressed. Option C (per-hub subdirectories) should be revisited as a future enhancement if per-hub cache isolation or other per-hub state becomes necessary.
-
 ### 3.3 Credential Store API Changes
 
 ```go
@@ -298,29 +297,31 @@ scion broker deregister --name prod
 
 The `--name` flag provides a human-friendly alias for the hub connection. If omitted, one is derived from the endpoint hostname, slugified (e.g., `hub-scion-dev`, `localhost`).
 
-The broker uses the **same UUID** across all hub registrations. On first registration, a UUID is generated and persisted locally. Subsequent registrations to other hubs present this same UUID.
+The broker uses the **same UUID** across all hub registrations. The UUID is stored in `~/.scion/settings.yaml` at `server.broker.broker_id`. On first registration, a UUID is generated locally by the broker and persisted to settings. Subsequent registrations to other hubs read and present this same UUID.
 
 ### 3.6 Settings Changes
 
-The global settings (`~/.scion/settings.yaml`) currently stores a single `hub.brokerId` and `hub.endpoint`. This should evolve:
+The global settings (`~/.scion/settings.yaml`) currently stores `server.broker.broker_id` (the broker's UUID) and `hub.endpoint`. This should evolve:
 
 ```yaml
+# Broker identity (unchanged — single UUID for this machine)
+server:
+  broker:
+    broker_id: uuid-1
+
 # Legacy (still supported, treated as default/unnamed connection)
 hub:
   endpoint: https://hub.scion.dev
-  brokerId: uuid-1
 
 # New: explicit multi-hub configuration
 hub_connections:
   prod:
     endpoint: https://hub.scion.dev
-    broker_id: uuid-1
   dev:
     endpoint: http://localhost:8080
-    broker_id: uuid-2
 ```
 
-The legacy `hub` section continues to work and is treated as an unnamed/default connection for backward compatibility.
+The `server.broker.broker_id` is the canonical broker UUID and is shared across all connections (not per-connection). The legacy `hub` section continues to work and is treated as an unnamed/default connection for backward compatibility. Note that `broker_id` is no longer per-connection in settings since it is always the same value.
 
 ### 3.7 Co-located Mode Integration
 
@@ -351,7 +352,7 @@ Each `HubConnection` runs its own independent `HeartbeatService`. Heartbeat payl
 
 Since groves are currently 1:1 with hubs (a grove is registered on exactly one hub), the broker-hub-grove combination is unique, making the filtering straightforward: the broker tracks which groves belong to which hub connection and includes only the relevant agents in each heartbeat.
 
-**Implementation note:** The `HeartbeatService` needs access to the grove-to-hub mapping. This can be derived from the control channel — when a hub sends agent creation/management commands, the broker records which hub owns which grove. The mapping is also available from the grove registration data stored per-connection.
+**Implementation note:** The grove-to-hub mapping is available from each grove's `.scion/settings.yaml` under the `hub` setting, where the endpoint uniquely identifies the hub. The `HeartbeatService` reads this mapping at startup and uses it to filter agent reports per hub. No additional persistence or control-channel inference is needed — the grove settings are the authoritative source.
 
 ### 3.9 Control Channel Fan-Out
 
@@ -370,13 +371,13 @@ A key concern with multi-hub: **agent name collisions**. Two hubs might try to c
 Since grove slugs are derived from git remotes (which are globally unique URLs), and each hub manages distinct groves, collisions are unlikely. However, the `global` grove exists on every hub.
 
 
-**Mitigation options:**
+**Mitigation options considered:**
 1. **Hub-scoped container prefix**: `scion-<hub-alias>-<grove-slug>-<agent-name>` - breaks existing containers
 2. **Conflict detection**: Before creating a container, check if the name is already in use. If so, append a hub-specific suffix.
 3. **Accept the risk**: Global grove collisions are the only realistic concern, and they're unlikely in practice since the global grove is typically used for one-off local agents.
 4. **Disable global grove on multi-hub brokers**: When a broker is connected to more than one hub, reject agent creation requests targeting the `global` grove. This eliminates the only realistic collision vector without changing container naming.
 
-**Recommendation:** Start with option 3 (accept the risk) for the initial implementation. Implement option 4 (disable global grove) in Phase 2 or 3 once multi-hub is functional, since it is a simple guard check. Option 2 (conflict detection) can be added later if non-global collisions emerge in practice.
+**Decision:** Option 4 — disable global grove when the broker is connected to multiple hubs. When an agent dispatch targets the `global` grove and the broker has more than one active hub connection, the broker returns an error to the requesting hub. The broker does **not** auto-withdraw from the hub's global grove, since the provider registration should remain in place for when the broker returns to single-hub mode. See Resolved Question 7.11 for details and the related open question about provider-level enabled/disabled flags.
 
 ---
 
@@ -385,7 +386,7 @@ Since grove slugs are derived from git remotes (which are globally unique URLs),
 ### Phase 1: Multi-Credential Store
 
 - Create `brokercredentials.MultiStore` (directory-based)
-- Implement broker UUID persistence (single UUID reused across all registrations)
+- Reuse existing `server.broker.broker_id` from settings as the stable UUID across all registrations
 - Add migration logic from legacy single-file format
 - Update `scion broker register` to accept `--name` flag and present stable broker UUID
 - Update `scion broker deregister` to accept `--name` flag
@@ -402,9 +403,9 @@ Since grove slugs are derived from git remotes (which are globally unique URLs),
 - Update credential watcher to scan directory for changes (add/remove/modify)
 - Update `reinitializeHubServices()` to handle per-connection reload
 - Multi-key `BrokerAuthMiddleware` (keyed by hub endpoint, single broker UUID)
-- Implement per-hub heartbeat filtering (grove-to-hub mapping)
+- Implement per-hub heartbeat filtering (grove-to-hub mapping from grove `.scion/settings.yaml`)
 - Thread hub connection context through agent creation path for template routing
-- Guard against global grove usage when multiple hubs are connected
+- Reject global grove agent dispatch when multiple hub connections are active
 - Tests for multi-connection lifecycle
 
 ### Phase 3: Co-located + Remote Combo
@@ -523,9 +524,9 @@ The following questions were raised during design review and have been resolved.
 
 ### 7.1 Broker Identity: Same UUID Across Hubs
 
-**Decision:** Use the **same `BrokerID` (UUID)** across all hubs. The UUID is the true identifier of the broker as a physical host. Hostnames are secondary and more prone to collisions than UUIDs. Each `scion broker register` presents the broker's existing UUID to the target hub during registration. If the broker has no UUID yet (first registration), one is generated and persisted locally for reuse with subsequent hub registrations.
+**Decision:** Use the **same `BrokerID` (UUID)** across all hubs. The UUID is the true identifier of the broker as a physical host. Hostnames are secondary and more prone to collisions than UUIDs. Each `scion broker register` presents the broker's existing UUID to the target hub during registration. If the broker has no UUID yet (first registration), one is generated locally and persisted for reuse with subsequent hub registrations.
 
-**Implementation note:** The broker UUID is stored once (e.g., in `~/.scion/broker-id` or derived from the first credential file) and presented to each hub during registration. The hub records this UUID in its broker table. The per-connection credential files still store the broker ID for consistency, but it is the same value across all files.
+**Implementation note:** The broker UUID is stored in `~/.scion/settings.yaml` at `server.broker.broker_id` (its current location). This is the canonical source. The per-connection credential files also store the broker ID for consistency, but it is the same value across all files.
 
 ### 7.2 Agent Visibility: Filtered by Hub
 
@@ -557,35 +558,47 @@ The following questions were raised during design review and have been resolved.
 
 **Decision:** Use the hostname portion of the endpoint URL, slugified. Examples: `https://hub.scion.dev` -> `hub-scion-dev`, `http://localhost:8080` -> `localhost`. The co-located connection is always named `local`.
 
+### 7.9 Broker UUID Persistence and Registration Flow
+
+**Decision:** The broker UUID is stored in its current location: `~/.scion/settings.yaml` at `server.broker.broker_id`. This is the canonical source of the broker's identity.
+
+- **UUID generation:** On first registration, the broker generates the UUID locally before contacting the hub. Since it is a UUID, the generation location does not matter.
+- **UUID conflicts on the hub:** If the hub already has a broker record with the same UUID (e.g., from a previous registration that was deregistered), this is a broken state — deregistration should have removed the hub-side record. The hub returns an error with a suggestion to manually delete the stale broker record on the hub and re-register.
+- **Subsequent registrations:** After the first registration, the broker reads its existing UUID from settings and presents it to each new hub during registration.
+
+### 7.10 Grove-to-Hub Mapping for Heartbeat Filtering
+
+**Decision:** The grove-to-hub mapping is read from each grove's `.scion/settings.yaml` under the `hub` setting. The hub endpoint stored there uniquely identifies which hub the grove belongs to. This is already persisted on disk and survives broker restarts. No additional mapping mechanism is needed — no control-channel inference, no separate persistence layer.
+
+**Implementation:** At startup and when groves are added/removed, the broker scans provided groves' settings files and builds a `groveSlug -> hubEndpoint` map. Each `HeartbeatService` uses this map to include only agents from groves that match its hub connection's endpoint.
+
+### 7.11 Global Grove Behavior on Multi-Hub Brokers
+
+**Decision:** Disable global grove dispatch when the broker is connected to multiple hubs. When an agent dispatch request targets the `global` grove and the broker has more than one active hub connection, the broker rejects the request with an error explaining that global grove is unavailable in multi-hub mode.
+
+**Key constraint:** The broker does **not** auto-withdraw from the hub's global grove provider registration. The registration should remain in place so that if the broker later returns to single-hub mode (e.g., a hub connection is removed), global grove dispatch resumes without re-registration.
+
+**Consequence:** Until provider-level enabled/disabled flags are implemented (see Open Question 8.1), the hub may still attempt to dispatch global grove agents to the broker, receiving an error at dispatch time. This is acceptable for the initial implementation.
+
 ---
 
 ## 8. Open Questions
 
-### 8.1 Broker UUID Persistence and Registration Flow
+### 8.1 Provider Enabled/Disabled Flag
 
-With the decision to use a single broker UUID across all hubs, the registration flow needs clarification:
+When the broker disables global grove dispatch in multi-hub mode (see Resolved Question 7.11), it intentionally does **not** auto-withdraw from the hub's global grove provider registration. This means the hub still considers the broker a valid provider and may dispatch agents to it, only to receive an error at dispatch time.
 
-- **Where is the canonical UUID stored?** Options: a dedicated `~/.scion/broker-id` file, or derived from the first credential file.
-- **What if the hub already has a broker with that UUID?** This could happen if the broker was previously registered and then deregistered. The hub should either reuse the existing record or return an error.
-- **What if the broker has no UUID yet?** First registration generates one. But should `scion broker register` generate it locally before contacting the hub, or should the hub assign it?
+To avoid this late-error pattern, provider records could support an **enabled/disabled** flag:
 
-### 8.2 Grove-to-Hub Mapping for Heartbeat Filtering
+- When the broker enters multi-hub mode, it marks its global grove provider registrations as `disabled` on each hub.
+- When the broker returns to single-hub mode, it re-enables them.
+- The hub skips disabled providers during dispatch, avoiding the error entirely.
 
-Heartbeat filtering requires the broker to know which groves belong to which hub. How is this mapping established and maintained?
+**Questions:**
+- Should this be a broker-initiated API call (`PATCH /api/v1/providers/:id { enabled: false }`), or a field the hub sets based on broker-reported state in the heartbeat?
+- Should the enabled/disabled flag be general-purpose (usable for other scenarios like maintenance mode) or scoped specifically to the multi-hub global grove case?
 
-- **At registration time:** When a grove is provided/registered on the broker for a specific hub, the mapping is recorded.
-- **Via control channel:** When a hub sends agent creation commands, the broker can infer grove ownership.
-- **Persistence:** Should the mapping be persisted to disk (surviving restarts) or reconstructed from hub connections on startup?
-
-### 8.3 Global Grove Behavior on Multi-Hub Brokers
-
-The `global` grove exists on every hub and is the primary source of container name collisions. Should the broker:
-
-- **Disable global grove entirely** when connected to multiple hubs?
-- **Assign global grove to one specific hub** (e.g., the `local` connection)?
-- **Allow it but warn** the user about potential collisions?
-
-This needs a decision before Phase 2 implementation.
+**Priority:** Low — the error-on-dispatch approach is functional for the initial implementation. This is a UX improvement for Phase 4 or later.
 
 ---
 
@@ -603,7 +616,7 @@ The migration must be seamless:
 
 ### 9.2 Settings Migration
 
-The `hub.brokerId` in settings continues to work. When `hub_connections` is present, it takes precedence. The legacy `hub` section is treated as a connection named `"default"`.
+The `server.broker.broker_id` in settings is unchanged (it remains the canonical broker UUID). The legacy `hub.endpoint` continues to work as a single-connection default. When `hub_connections` is present, it takes precedence. The legacy `hub` section is treated as a connection named `"default"`.
 
 ### 9.3 CLI Compatibility
 
@@ -615,12 +628,12 @@ All existing `scion broker` commands continue to work without `--name`. They ope
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Container name collisions (global grove) | Agent creation fails | Disable global grove on multi-hub brokers (Phase 2/3); conflict detection as fallback |
+| Container name collisions (global grove) | Agent creation fails | Global grove dispatch disabled in multi-hub mode; broker returns error without auto-withdrawing provider registration |
 | Credential file corruption during concurrent writes | Hub connection fails | File-per-hub model reduces blast radius; mutex protects individual files |
 | Heartbeat load multiplication (N hubs x 1 heartbeat each) | Minor network overhead | Heartbeats are small (<1KB); 30s interval is already conservative; per-hub filtering reduces payload |
 | Control channel multiplexing complexity | Increased memory/goroutine usage | Each connection is independent; goroutine count scales linearly |
-| Grove-to-hub mapping drift | Wrong agents reported to wrong hub | Mapping derived from registration data and control channel; persisted for restart resilience |
-| Same UUID rejected by hub | Registration fails | Hub should handle re-registration gracefully (upsert or clear error message) |
+| Grove-to-hub mapping drift | Wrong agents reported to wrong hub | Mapping read from grove `.scion/settings.yaml` hub settings; already persisted on disk |
+| Same UUID rejected by hub | Registration fails | Stale UUID after deregistration is a broken state; hub returns error with guidance to manually delete and re-register |
 | Migration breaks existing setups | Broker disconnects from hub | Automatic migration with fallback; old file preserved as backup |
 
 ---
@@ -631,11 +644,12 @@ The recommended approach is to introduce a `HubConnection` abstraction and evolv
 
 1. **Directory-based credential storage** (`~/.scion/hub-credentials/<name>.json`) with Option C (per-hub subdirectories) as a future enhancement
 2. **Independent services per connection** (heartbeat, control channel, hub client)
-3. **Same broker UUID across all hubs** (one machine = one identity; hostname is secondary)
+3. **Same broker UUID across all hubs** (stored at `server.broker.broker_id` in settings; one machine = one identity)
 4. **Co-located mode as a special `"local"` connection** alongside file-based connections
-5. **Hub-filtered heartbeats** (each hub only sees agents for its own groves; strict isolation)
+5. **Hub-filtered heartbeats** (grove-to-hub mapping from grove settings; each hub only sees its own groves)
 6. **One dev-auth hub limit** enforced at registration time; multiple HMAC hubs fully supported
 7. **Template requests routed to originating hub** (broker-hub relationships are isolated)
-8. **CLI defaults to current grove's hub** when `--hub` flag is omitted
-9. **Hub aliases derived from slugified hostname** (e.g., `hub-scion-dev`); co-located is always `local`
-10. **Phased implementation** starting with the credential store, then server refactoring, then combo mode, then CLI polish
+8. **Global grove disabled in multi-hub mode** (dispatch rejected; provider registration preserved for single-hub fallback)
+9. **CLI defaults to current grove's hub** when `--hub` flag is omitted
+10. **Hub aliases derived from slugified hostname** (e.g., `hub-scion-dev`); co-located is always `local`
+11. **Phased implementation** starting with the credential store, then server refactoring, then combo mode, then CLI polish
