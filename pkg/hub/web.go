@@ -477,6 +477,7 @@ func (ws *WebServer) sessionToBearerMiddleware(next http.Handler) http.Handler {
 func (ws *WebServer) registerRoutes() {
 	ws.mux.HandleFunc("/healthz", ws.handleHealthz)
 	ws.mux.Handle("/assets/", ws.staticHandler())
+	ws.mux.Handle("/shoelace/", ws.staticHandler())
 	// Auth routes (no session auth required)
 	ws.mux.HandleFunc("/auth/login/", ws.handleOAuthLogin)
 	ws.mux.HandleFunc("/auth/callback/", ws.handleOAuthCallback)
@@ -742,6 +743,8 @@ func isPublicRoute(path string) bool {
 	case path == "/healthz":
 		return true
 	case strings.HasPrefix(path, "/assets/"):
+		return true
+	case strings.HasPrefix(path, "/shoelace/"):
 		return true
 	case strings.HasPrefix(path, "/auth/"):
 		return true

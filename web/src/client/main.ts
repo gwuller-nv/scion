@@ -23,9 +23,11 @@
 import type { PageData } from '../shared/types.js';
 import { stateManager } from './state.js';
 
-// Import Shoelace base path config (needed for icons)
+// Import Shoelace base path config (needed for icons).
+// Icons are copied to public/shoelace/ by scripts/copy-shoelace-icons.mjs
+// so they are available under both the Vite dev server and the Go server.
 import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.js';
-setBasePath('/node_modules/@shoelace-style/shoelace/dist');
+setBasePath('/shoelace');
 
 // Explicitly import all Shoelace components used in the app.
 // The autoloader cannot detect sl-* elements inside LitElement shadow roots,

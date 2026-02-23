@@ -7,11 +7,13 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "clean": "rm -rf node_modules dist public/assets",
-    "dev": "vite --mode development",
-    "build": "vite build && npm run copy:client",
-    "build:dev": "vite build --mode development && npm run copy:client",
+    "clean": "rm -rf node_modules dist public/assets public/shoelace",
+    "postinstall": "npm run copy:shoelace-icons",
+    "dev": "npm run copy:shoelace-icons && vite --mode development",
+    "build": "npm run copy:shoelace-icons && vite build && npm run copy:client",
+    "build:dev": "npm run copy:shoelace-icons && vite build --mode development && npm run copy:client",
     "copy:client": "mkdir -p public/assets && cp -r dist/client/assets/* public/assets/",
+    "copy:shoelace-icons": "node scripts/copy-shoelace-icons.mjs",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",

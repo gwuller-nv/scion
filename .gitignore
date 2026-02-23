@@ -18,6 +18,7 @@ web/dist/*
 web/dist/client/*
 !web/dist/client/.gitkeep
 web/public/assets/
+web/public/shoelace/
 
 # docs site
 docs-site/node_modules/
