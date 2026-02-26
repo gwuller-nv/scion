@@ -29,9 +29,10 @@ import (
 
 // ListGroupsResponse is the response for listing groups.
 type ListGroupsResponse struct {
-	Groups     []store.Group `json:"groups"`
-	NextCursor string        `json:"nextCursor,omitempty"`
-	TotalCount int           `json:"totalCount"`
+	Groups       []GroupWithCapabilities `json:"groups"`
+	NextCursor   string                 `json:"nextCursor,omitempty"`
+	TotalCount   int                    `json:"totalCount"`
+	Capabilities *Capabilities          `json:"_capabilities,omitempty"`
 }
 
 // CreateGroupRequest is the request body for creating a group.
@@ -105,10 +106,34 @@ func (s *Server) listGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Compute per-item and scope capabilities
+	identity := GetIdentityFromContext(ctx)
+	groups := make([]GroupWithCapabilities, len(result.Items))
+	if identity != nil {
+		resources := make([]Resource, len(result.Items))
+		for i := range result.Items {
+			resources[i] = groupResource(&result.Items[i])
+		}
+		caps := s.authzService.ComputeCapabilitiesBatch(ctx, identity, resources, "group")
+		for i := range result.Items {
+			groups[i] = GroupWithCapabilities{Group: result.Items[i], Cap: caps[i]}
+		}
+	} else {
+		for i := range result.Items {
+			groups[i] = GroupWithCapabilities{Group: result.Items[i]}
+		}
+	}
+
+	var scopeCap *Capabilities
+	if identity != nil {
+		scopeCap = s.authzService.ComputeScopeCapabilities(ctx, identity, "", "", "group")
+	}
+
 	writeJSON(w, http.StatusOK, ListGroupsResponse{
-		Groups:     result.Items,
-		NextCursor: result.NextCursor,
-		TotalCount: result.TotalCount,
+		Groups:       groups,
+		NextCursor:   result.NextCursor,
+		TotalCount:   result.TotalCount,
+		Capabilities: scopeCap,
 	})
 }
 
@@ -235,7 +260,12 @@ func (s *Server) getGroup(w http.ResponseWriter, r *http.Request, id string) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, group)
+	resp := GroupWithCapabilities{Group: *group}
+	if identity := GetIdentityFromContext(ctx); identity != nil {
+		resp.Cap = s.authzService.ComputeCapabilities(ctx, identity, groupResource(group))
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) updateGroup(w http.ResponseWriter, r *http.Request, id string) {

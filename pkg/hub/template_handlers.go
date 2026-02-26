@@ -164,10 +164,34 @@ func (s *Server) listTemplatesV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Compute per-item and scope capabilities
+	identity := GetIdentityFromContext(ctx)
+	templates := make([]TemplateWithCapabilities, len(result.Items))
+	if identity != nil {
+		resources := make([]Resource, len(result.Items))
+		for i := range result.Items {
+			resources[i] = templateResource(&result.Items[i])
+		}
+		caps := s.authzService.ComputeCapabilitiesBatch(ctx, identity, resources, "template")
+		for i := range result.Items {
+			templates[i] = TemplateWithCapabilities{Template: result.Items[i], Cap: caps[i]}
+		}
+	} else {
+		for i := range result.Items {
+			templates[i] = TemplateWithCapabilities{Template: result.Items[i]}
+		}
+	}
+
+	var scopeCap *Capabilities
+	if identity != nil {
+		scopeCap = s.authzService.ComputeScopeCapabilities(ctx, identity, "", "", "template")
+	}
+
 	writeJSON(w, http.StatusOK, ListTemplatesResponse{
-		Templates:  result.Items,
-		NextCursor: result.NextCursor,
-		TotalCount: result.TotalCount,
+		Templates:    templates,
+		NextCursor:   result.NextCursor,
+		TotalCount:   result.TotalCount,
+		Capabilities: scopeCap,
 	})
 }
 
@@ -311,13 +335,19 @@ func (s *Server) handleTemplateCRUD(w http.ResponseWriter, r *http.Request, id s
 
 // getTemplateV2 retrieves a template with full metadata.
 func (s *Server) getTemplateV2(w http.ResponseWriter, r *http.Request, id string) {
-	template, err := s.store.GetTemplate(r.Context(), id)
+	ctx := r.Context()
+	template, err := s.store.GetTemplate(ctx, id)
 	if err != nil {
 		writeErrorFromErr(w, err, "")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, template)
+	resp := TemplateWithCapabilities{Template: *template}
+	if identity := GetIdentityFromContext(ctx); identity != nil {
+		resp.Cap = s.authzService.ComputeCapabilities(ctx, identity, templateResource(template))
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // updateTemplateV2 replaces a template (upsert style).

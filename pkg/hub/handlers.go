@@ -160,10 +160,11 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 type ListAgentsResponse struct {
-	Agents     []store.Agent `json:"agents"`
-	NextCursor string        `json:"nextCursor,omitempty"`
-	TotalCount int           `json:"totalCount"`
-	ServerTime time.Time     `json:"serverTime"`
+	Agents       []AgentWithCapabilities `json:"agents"`
+	NextCursor   string                  `json:"nextCursor,omitempty"`
+	TotalCount   int                     `json:"totalCount"`
+	ServerTime   time.Time               `json:"serverTime"`
+	Capabilities *Capabilities           `json:"_capabilities,omitempty"`
 }
 
 type CreateAgentRequest struct {
@@ -272,11 +273,35 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 	// Enrich agents with grove and broker names
 	s.enrichAgents(ctx, result.Items)
 
+	// Compute per-item and scope capabilities
+	identity := GetIdentityFromContext(ctx)
+	agents := make([]AgentWithCapabilities, len(result.Items))
+	if identity != nil {
+		resources := make([]Resource, len(result.Items))
+		for i := range result.Items {
+			resources[i] = agentResource(&result.Items[i])
+		}
+		caps := s.authzService.ComputeCapabilitiesBatch(ctx, identity, resources, "agent")
+		for i := range result.Items {
+			agents[i] = AgentWithCapabilities{Agent: result.Items[i], Cap: caps[i]}
+		}
+	} else {
+		for i := range result.Items {
+			agents[i] = AgentWithCapabilities{Agent: result.Items[i]}
+		}
+	}
+
+	var scopeCap *Capabilities
+	if identity != nil {
+		scopeCap = s.authzService.ComputeScopeCapabilities(ctx, identity, "", "", "agent")
+	}
+
 	writeJSON(w, http.StatusOK, ListAgentsResponse{
-		Agents:     result.Items,
-		NextCursor: result.NextCursor,
-		TotalCount: result.TotalCount,
-		ServerTime: time.Now().UTC(),
+		Agents:       agents,
+		NextCursor:   result.NextCursor,
+		TotalCount:   result.TotalCount,
+		ServerTime:   time.Now().UTC(),
+		Capabilities: scopeCap,
 	})
 }
 
@@ -998,7 +1023,13 @@ func (s *Server) getAgent(w http.ResponseWriter, r *http.Request, id string) {
 	// Enrich agent with grove and broker names
 	s.enrichAgent(ctx, agent, nil, nil)
 
-	writeJSON(w, http.StatusOK, agent)
+	// Compute capabilities for this agent
+	resp := AgentWithCapabilities{Agent: *agent}
+	if identity := GetIdentityFromContext(ctx); identity != nil {
+		resp.Cap = s.authzService.ComputeCapabilities(ctx, identity, agentResource(agent))
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request, id string) {
@@ -1438,9 +1469,10 @@ func (s *Server) handleAgentLifecycle(w http.ResponseWriter, r *http.Request, id
 // ============================================================================
 
 type ListGrovesResponse struct {
-	Groves     []store.Grove `json:"groves"`
-	NextCursor string        `json:"nextCursor,omitempty"`
-	TotalCount int           `json:"totalCount"`
+	Groves       []GroveWithCapabilities `json:"groves"`
+	NextCursor   string                  `json:"nextCursor,omitempty"`
+	TotalCount   int                     `json:"totalCount"`
+	Capabilities *Capabilities           `json:"_capabilities,omitempty"`
 }
 
 type CreateGroveRequest struct {
@@ -1528,10 +1560,34 @@ func (s *Server) listGroves(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Compute per-item and scope capabilities
+	identity := GetIdentityFromContext(ctx)
+	groves := make([]GroveWithCapabilities, len(result.Items))
+	if identity != nil {
+		resources := make([]Resource, len(result.Items))
+		for i := range result.Items {
+			resources[i] = groveResource(&result.Items[i])
+		}
+		caps := s.authzService.ComputeCapabilitiesBatch(ctx, identity, resources, "grove")
+		for i := range result.Items {
+			groves[i] = GroveWithCapabilities{Grove: result.Items[i], Cap: caps[i]}
+		}
+	} else {
+		for i := range result.Items {
+			groves[i] = GroveWithCapabilities{Grove: result.Items[i]}
+		}
+	}
+
+	var scopeCap *Capabilities
+	if identity != nil {
+		scopeCap = s.authzService.ComputeScopeCapabilities(ctx, identity, "", "", "grove")
+	}
+
 	writeJSON(w, http.StatusOK, ListGrovesResponse{
-		Groves:     result.Items,
-		NextCursor: result.NextCursor,
-		TotalCount: result.TotalCount,
+		Groves:       groves,
+		NextCursor:   result.NextCursor,
+		TotalCount:   result.TotalCount,
+		Capabilities: scopeCap,
 	})
 }
 
@@ -2244,11 +2300,35 @@ func (s *Server) listGroveAgents(w http.ResponseWriter, r *http.Request, groveID
 	// Enrich agents with grove and broker names
 	s.enrichAgents(ctx, result.Items)
 
+	// Compute per-item and scope capabilities
+	identity := GetIdentityFromContext(ctx)
+	agents := make([]AgentWithCapabilities, len(result.Items))
+	if identity != nil {
+		resources := make([]Resource, len(result.Items))
+		for i := range result.Items {
+			resources[i] = agentResource(&result.Items[i])
+		}
+		caps := s.authzService.ComputeCapabilitiesBatch(ctx, identity, resources, "agent")
+		for i := range result.Items {
+			agents[i] = AgentWithCapabilities{Agent: result.Items[i], Cap: caps[i]}
+		}
+	} else {
+		for i := range result.Items {
+			agents[i] = AgentWithCapabilities{Agent: result.Items[i]}
+		}
+	}
+
+	var scopeCap *Capabilities
+	if identity != nil {
+		scopeCap = s.authzService.ComputeScopeCapabilities(ctx, identity, "grove", groveID, "agent")
+	}
+
 	writeJSON(w, http.StatusOK, ListAgentsResponse{
-		Agents:     result.Items,
-		NextCursor: result.NextCursor,
-		TotalCount: result.TotalCount,
-		ServerTime: time.Now().UTC(),
+		Agents:       agents,
+		NextCursor:   result.NextCursor,
+		TotalCount:   result.TotalCount,
+		ServerTime:   time.Now().UTC(),
+		Capabilities: scopeCap,
 	})
 }
 
@@ -2699,13 +2779,19 @@ func (s *Server) handleGroveByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getGrove(w http.ResponseWriter, r *http.Request, id string) {
-	grove, err := s.store.GetGrove(r.Context(), id)
+	ctx := r.Context()
+	grove, err := s.store.GetGrove(ctx, id)
 	if err != nil {
 		writeErrorFromErr(w, err, "")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, grove)
+	resp := GroveWithCapabilities{Grove: *grove}
+	if identity := GetIdentityFromContext(ctx); identity != nil {
+		resp.Cap = s.authzService.ComputeCapabilities(ctx, identity, groveResource(grove))
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) updateGrove(w http.ResponseWriter, r *http.Request, id string) {
@@ -3291,9 +3377,10 @@ func (s *Server) getBrokerGroves(w http.ResponseWriter, r *http.Request, brokerI
 // ============================================================================
 
 type ListTemplatesResponse struct {
-	Templates  []store.Template `json:"templates"`
-	NextCursor string           `json:"nextCursor,omitempty"`
-	TotalCount int              `json:"totalCount"`
+	Templates    []TemplateWithCapabilities `json:"templates"`
+	NextCursor   string                     `json:"nextCursor,omitempty"`
+	TotalCount   int                        `json:"totalCount"`
+	Capabilities *Capabilities              `json:"_capabilities,omitempty"`
 }
 
 // ============================================================================
@@ -3344,10 +3431,34 @@ func (s *Server) listTemplates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Compute per-item and scope capabilities
+	identity := GetIdentityFromContext(ctx)
+	templates := make([]TemplateWithCapabilities, len(result.Items))
+	if identity != nil {
+		resources := make([]Resource, len(result.Items))
+		for i := range result.Items {
+			resources[i] = templateResource(&result.Items[i])
+		}
+		caps := s.authzService.ComputeCapabilitiesBatch(ctx, identity, resources, "template")
+		for i := range result.Items {
+			templates[i] = TemplateWithCapabilities{Template: result.Items[i], Cap: caps[i]}
+		}
+	} else {
+		for i := range result.Items {
+			templates[i] = TemplateWithCapabilities{Template: result.Items[i]}
+		}
+	}
+
+	var scopeCap *Capabilities
+	if identity != nil {
+		scopeCap = s.authzService.ComputeScopeCapabilities(ctx, identity, "", "", "template")
+	}
+
 	writeJSON(w, http.StatusOK, ListTemplatesResponse{
-		Templates:  result.Items,
-		NextCursor: result.NextCursor,
-		TotalCount: result.TotalCount,
+		Templates:    templates,
+		NextCursor:   result.NextCursor,
+		TotalCount:   result.TotalCount,
+		Capabilities: scopeCap,
 	})
 }
 
@@ -3403,13 +3514,19 @@ func (s *Server) handleTemplateByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getTemplate(w http.ResponseWriter, r *http.Request, id string) {
-	template, err := s.store.GetTemplate(r.Context(), id)
+	ctx := r.Context()
+	template, err := s.store.GetTemplate(ctx, id)
 	if err != nil {
 		writeErrorFromErr(w, err, "")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, template)
+	resp := TemplateWithCapabilities{Template: *template}
+	if identity := GetIdentityFromContext(ctx); identity != nil {
+		resp.Cap = s.authzService.ComputeCapabilities(ctx, identity, templateResource(template))
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) updateTemplate(w http.ResponseWriter, r *http.Request, id string) {
@@ -3457,9 +3574,10 @@ func (s *Server) deleteTemplate(w http.ResponseWriter, r *http.Request, id strin
 // ============================================================================
 
 type ListUsersResponse struct {
-	Users      []store.User `json:"users"`
-	NextCursor string       `json:"nextCursor,omitempty"`
-	TotalCount int          `json:"totalCount"`
+	Users        []UserWithCapabilities `json:"users"`
+	NextCursor   string                 `json:"nextCursor,omitempty"`
+	TotalCount   int                    `json:"totalCount"`
+	Capabilities *Capabilities          `json:"_capabilities,omitempty"`
 }
 
 func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
@@ -3498,8 +3616,26 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Compute per-item capabilities (users have no scope-level create action)
+	identity := GetIdentityFromContext(ctx)
+	users := make([]UserWithCapabilities, len(result.Items))
+	if identity != nil {
+		resources := make([]Resource, len(result.Items))
+		for i := range result.Items {
+			resources[i] = userResource(&result.Items[i])
+		}
+		caps := s.authzService.ComputeCapabilitiesBatch(ctx, identity, resources, "user")
+		for i := range result.Items {
+			users[i] = UserWithCapabilities{User: result.Items[i], Cap: caps[i]}
+		}
+	} else {
+		for i := range result.Items {
+			users[i] = UserWithCapabilities{User: result.Items[i]}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, ListUsersResponse{
-		Users:      result.Items,
+		Users:      users,
 		NextCursor: result.NextCursor,
 		TotalCount: result.TotalCount,
 	})
@@ -3533,13 +3669,19 @@ func (s *Server) handleUserByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getUser(w http.ResponseWriter, r *http.Request, id string) {
-	user, err := s.store.GetUser(r.Context(), id)
+	ctx := r.Context()
+	user, err := s.store.GetUser(ctx, id)
 	if err != nil {
 		writeErrorFromErr(w, err, "")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, user)
+	resp := UserWithCapabilities{User: *user}
+	if identity := GetIdentityFromContext(ctx); identity != nil {
+		resp.Cap = s.authzService.ComputeCapabilities(ctx, identity, userResource(user))
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) updateUser(w http.ResponseWriter, r *http.Request, id string) {

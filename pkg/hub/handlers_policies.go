@@ -30,9 +30,10 @@ import (
 
 // ListPoliciesResponse is the response for listing policies.
 type ListPoliciesResponse struct {
-	Policies   []store.Policy `json:"policies"`
-	NextCursor string         `json:"nextCursor,omitempty"`
-	TotalCount int            `json:"totalCount"`
+	Policies     []PolicyWithCapabilities `json:"policies"`
+	NextCursor   string                  `json:"nextCursor,omitempty"`
+	TotalCount   int                     `json:"totalCount"`
+	Capabilities *Capabilities           `json:"_capabilities,omitempty"`
 }
 
 // CreatePolicyRequest is the request body for creating a policy.
@@ -134,10 +135,34 @@ func (s *Server) listPolicies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Compute per-item and scope capabilities
+	identity := GetIdentityFromContext(ctx)
+	policies := make([]PolicyWithCapabilities, len(result.Items))
+	if identity != nil {
+		resources := make([]Resource, len(result.Items))
+		for i := range result.Items {
+			resources[i] = policyResource(&result.Items[i])
+		}
+		caps := s.authzService.ComputeCapabilitiesBatch(ctx, identity, resources, "policy")
+		for i := range result.Items {
+			policies[i] = PolicyWithCapabilities{Policy: result.Items[i], Cap: caps[i]}
+		}
+	} else {
+		for i := range result.Items {
+			policies[i] = PolicyWithCapabilities{Policy: result.Items[i]}
+		}
+	}
+
+	var scopeCap *Capabilities
+	if identity != nil {
+		scopeCap = s.authzService.ComputeScopeCapabilities(ctx, identity, "", "", "policy")
+	}
+
 	writeJSON(w, http.StatusOK, ListPoliciesResponse{
-		Policies:   result.Items,
-		NextCursor: result.NextCursor,
-		TotalCount: result.TotalCount,
+		Policies:     policies,
+		NextCursor:   result.NextCursor,
+		TotalCount:   result.TotalCount,
+		Capabilities: scopeCap,
 	})
 }
 
@@ -276,7 +301,12 @@ func (s *Server) getPolicy(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, policy)
+	resp := PolicyWithCapabilities{Policy: *policy}
+	if identity := GetIdentityFromContext(ctx); identity != nil {
+		resp.Cap = s.authzService.ComputeCapabilities(ctx, identity, policyResource(policy))
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) updatePolicy(w http.ResponseWriter, r *http.Request, id string) {
