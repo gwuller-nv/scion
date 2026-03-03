@@ -16,7 +16,6 @@ package hub
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,7 +34,7 @@ func (s *Server) BootstrapTemplatesFromDir(ctx context.Context, templatesDir str
 	// Check if the directory exists
 	info, err := os.Stat(templatesDir)
 	if err != nil || !info.IsDir() {
-		slog.Debug("template bootstrap: directory not found, skipping", "dir", templatesDir)
+		s.templateLog.Debug("template bootstrap: directory not found, skipping", "dir", templatesDir)
 		return nil
 	}
 
@@ -45,14 +44,14 @@ func (s *Server) BootstrapTemplatesFromDir(ctx context.Context, templatesDir str
 		return err
 	}
 	if result.TotalCount > 0 {
-		slog.Debug("template bootstrap: templates already exist in database, skipping")
+		s.templateLog.Debug("template bootstrap: templates already exist in database, skipping")
 		return nil
 	}
 
 	// Check that storage is configured
 	stor := s.GetStorage()
 	if stor == nil {
-		slog.Warn("template bootstrap: no storage backend configured, skipping")
+		s.templateLog.Warn("template bootstrap: no storage backend configured, skipping")
 		return nil
 	}
 
@@ -72,7 +71,7 @@ func (s *Server) BootstrapTemplatesFromDir(ctx context.Context, templatesDir str
 		templatePath := filepath.Join(templatesDir, name)
 
 		if err := s.bootstrapSingleTemplate(ctx, name, templatePath); err != nil {
-			slog.Warn("template bootstrap: failed to import template, skipping",
+			s.templateLog.Warn("template bootstrap: failed to import template, skipping",
 				"template", name, "error", err)
 			continue
 		}
@@ -80,7 +79,7 @@ func (s *Server) BootstrapTemplatesFromDir(ctx context.Context, templatesDir str
 	}
 
 	if imported > 0 {
-		slog.Info("template bootstrap: imported local templates", "count", imported)
+		s.templateLog.Info("template bootstrap: imported local templates", "count", imported)
 	}
 
 	return nil
@@ -129,7 +128,7 @@ func (s *Server) bootstrapSingleTemplate(ctx context.Context, name, templatePath
 
 		f, err := os.Open(fi.FullPath)
 		if err != nil {
-			slog.Warn("template bootstrap: failed to open file, skipping",
+			s.templateLog.Warn("template bootstrap: failed to open file, skipping",
 				"file", fi.Path, "error", err)
 			continue
 		}
@@ -137,7 +136,7 @@ func (s *Server) bootstrapSingleTemplate(ctx context.Context, name, templatePath
 		_, err = stor.Upload(ctx, objectPath, f, storage.UploadOptions{})
 		f.Close()
 		if err != nil {
-			slog.Warn("template bootstrap: failed to upload file, skipping",
+			s.templateLog.Warn("template bootstrap: failed to upload file, skipping",
 				"file", fi.Path, "error", err)
 			continue
 		}
@@ -160,7 +159,7 @@ func (s *Server) bootstrapSingleTemplate(ctx context.Context, name, templatePath
 		return err
 	}
 
-	slog.Info("template bootstrap: imported template",
+	s.templateLog.Info("template bootstrap: imported template",
 		"name", name, "files", len(templateFiles), "harness", harness)
 	return nil
 }

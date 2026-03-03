@@ -535,7 +535,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 			provider, err := s.store.GetGroveProvider(ctx, req.GroveID, runtimeBrokerID)
 			if err == nil && provider.LocalPath != "" {
 				hasLocalPath = true
-				slog.Debug("Workspace bootstrap: broker has local path, skipping upload",
+				s.agentLifecycleLog.Debug("Workspace bootstrap: broker has local path, skipping upload",
 					"broker", runtimeBrokerID, "localPath", provider.LocalPath)
 			}
 		}
@@ -557,7 +557,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 			// Set agent to provisioning phase (not dispatched yet)
 			agent.Phase = string(state.PhaseProvisioning)
 			if err := s.store.UpdateAgent(ctx, agent); err != nil {
-				slog.Warn("Failed to update agent status to provisioning", "error", err)
+				s.agentLifecycleLog.Warn("Failed to update agent status to provisioning", "error", err)
 			}
 
 			expires := time.Now().Add(SignedURLExpiry)
@@ -565,7 +565,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 
 			var warnings []string
 			if len(existingFiles) > 0 {
-				slog.Debug("Workspace bootstrap: files already in storage", "count", len(existingFiles))
+				s.agentLifecycleLog.Debug("Workspace bootstrap: files already in storage", "count", len(existingFiles))
 			}
 
 			writeJSON(w, http.StatusCreated, CreateAgentResponse{
@@ -595,14 +595,14 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 			if stor != nil {
 				storagePath := storage.GroveWorkspaceStoragePath(grove.ID)
 				if err := gcp.SyncToGCS(ctx, agent.AppliedConfig.Workspace, stor.Bucket(), storagePath+"/files"); err != nil {
-					slog.Warn("Failed to upload hub-native grove workspace to GCS",
+					s.agentLifecycleLog.Warn("Failed to upload hub-native grove workspace to GCS",
 						"grove", grove.ID, "error", err)
 				} else {
 					// Swap workspace to storage path for remote broker
 					agent.AppliedConfig.Workspace = ""
 					agent.AppliedConfig.WorkspaceStoragePath = storagePath
 					if err := s.store.UpdateAgent(ctx, agent); err != nil {
-						slog.Warn("Failed to update agent with workspace storage path", "error", err)
+						s.agentLifecycleLog.Warn("Failed to update agent with workspace storage path", "error", err)
 					}
 				}
 			}
@@ -617,7 +617,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		if !req.ProvisionOnly {
 			// Use env-gather dispatch if requested
 			if req.GatherEnv {
-				slog.Debug("Hub: env-gather requested, using DispatchAgentCreateWithGather",
+				s.agentLifecycleLog.Debug("Hub: env-gather requested, using DispatchAgentCreateWithGather",
 					"agent", agent.Name, "broker", agent.RuntimeBrokerID)
 				envReqs, err := dispatcher.DispatchAgentCreateWithGather(ctx, agent)
 				if err != nil {
@@ -626,7 +626,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 					// Broker returned 202: needs env gather
 					agent.Phase = string(state.PhaseProvisioning)
 					if err := s.store.UpdateAgent(ctx, agent); err != nil {
-						slog.Warn("Failed to update agent phase for env-gather", "error", err)
+						s.agentLifecycleLog.Warn("Failed to update agent phase for env-gather", "error", err)
 					}
 
 					s.enrichAgent(ctx, agent, grove, nil)
@@ -865,7 +865,7 @@ func (s *Server) submitAgentEnv(w http.ResponseWriter, r *http.Request, groveID,
 		agent.Phase = string(state.PhaseRunning)
 	}
 	if err := s.store.UpdateAgent(ctx, agent); err != nil {
-		slog.Warn("Failed to update agent phase after env submit", "error", err)
+		s.agentLifecycleLog.Warn("Failed to update agent phase after env submit", "error", err)
 	}
 
 	// Enrich and return
@@ -989,10 +989,10 @@ func (s *Server) enrichAgent(ctx context.Context, agent *store.Agent, grove *sto
 	} else if agent.RuntimeBrokerID != "" {
 		b, err := s.store.GetRuntimeBroker(ctx, agent.RuntimeBrokerID)
 		if err != nil {
-			slog.Debug("failed to get runtime broker for enrichment", "brokerID", agent.RuntimeBrokerID, "error", err)
+			s.agentLifecycleLog.Debug("failed to get runtime broker for enrichment", "brokerID", agent.RuntimeBrokerID, "error", err)
 		} else {
 			agent.RuntimeBrokerName = b.Name
-			slog.Debug("enriched agent with broker name", "slug", agent.Slug, "brokerName", b.Name)
+			s.agentLifecycleLog.Debug("enriched agent with broker name", "slug", agent.Slug, "brokerName", b.Name)
 			if agent.Runtime == "" && len(b.Profiles) > 0 {
 				for _, p := range b.Profiles {
 					if p.Available {
@@ -1158,7 +1158,7 @@ func (s *Server) checkBrokerAvailability(w http.ResponseWriter, r *http.Request,
 	// Fall back to DB status check (covers co-located mode where there's no WebSocket)
 	broker, err := s.store.GetRuntimeBroker(r.Context(), agent.RuntimeBrokerID)
 	if err != nil {
-		slog.Warn("Failed to check broker status", "brokerID", agent.RuntimeBrokerID, "error", err)
+		s.agentLifecycleLog.Warn("Failed to check broker status", "brokerID", agent.RuntimeBrokerID, "error", err)
 		// If we can't verify, let it through rather than blocking
 		return true
 	}
@@ -1235,11 +1235,11 @@ func (s *Server) performAgentDelete(w http.ResponseWriter, r *http.Request, agen
 		if err := dispatcher.DispatchAgentDelete(ctx, agent, deleteFiles, removeBranch, softDelete, now); err != nil {
 			if force {
 				// Force mode: log warning and continue with hub record deletion
-				slog.Warn("Failed to dispatch agent delete to broker (force=true, continuing)",
+				s.agentLifecycleLog.Warn("Failed to dispatch agent delete to broker (force=true, continuing)",
 					"agentID", agent.ID, "error", err)
 			} else {
 				// Normal mode: fail the operation to avoid orphaning the agent on the broker
-				slog.Error("Failed to dispatch agent delete to broker", "agentID", agent.ID, "error", err)
+				s.agentLifecycleLog.Error("Failed to dispatch agent delete to broker", "agentID", agent.ID, "error", err)
 				writeError(w, http.StatusBadGateway, ErrCodeRuntimeError,
 					"Failed to delete agent on runtime broker: "+err.Error(), nil)
 				return
@@ -1443,7 +1443,7 @@ func (s *Server) updateAgentStatus(w http.ResponseWriter, r *http.Request, id st
 	if agent, err := s.store.GetAgent(ctx, id); err == nil {
 		s.events.PublishAgentStatus(ctx, agent)
 	} else {
-		slog.Warn("Failed to fetch agent for status event", "agentID", id, "error", err)
+		s.agentLifecycleLog.Warn("Failed to fetch agent for status event", "agentID", id, "error", err)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -1961,7 +1961,7 @@ func (s *Server) syncWorkspaceOnStop(ctx context.Context, agent *store.Agent) {
 	}
 	var uploadResp RuntimeBrokerWorkspaceUploadResponse
 	if err := tunnelWorkspaceRequest(ctx, cc, agent.RuntimeBrokerID, "POST", "/api/v1/workspace/upload", uploadReq, &uploadResp); err != nil {
-		slog.Warn("syncWorkspaceOnStop: failed to upload workspace from broker",
+		s.agentLifecycleLog.Warn("syncWorkspaceOnStop: failed to upload workspace from broker",
 			"agent", agent.Name, "grove", grove.ID, "error", err)
 		return
 	}
@@ -1969,15 +1969,15 @@ func (s *Server) syncWorkspaceOnStop(ctx context.Context, agent *store.Agent) {
 	// Download from GCS to Hub filesystem
 	workspacePath, err := hubNativeGrovePath(grove.Slug)
 	if err != nil {
-		slog.Warn("syncWorkspaceOnStop: failed to get grove path", "error", err)
+		s.agentLifecycleLog.Warn("syncWorkspaceOnStop: failed to get grove path", "error", err)
 		return
 	}
 
 	if err := gcp.SyncFromGCS(ctx, stor.Bucket(), storagePath+"/files", workspacePath); err != nil {
-		slog.Warn("syncWorkspaceOnStop: GCS download failed",
+		s.agentLifecycleLog.Warn("syncWorkspaceOnStop: GCS download failed",
 			"grove", grove.ID, "error", err)
 	} else {
-		slog.Info("syncWorkspaceOnStop: workspace synced back to Hub",
+		s.agentLifecycleLog.Info("syncWorkspaceOnStop: workspace synced back to Hub",
 			"grove", grove.ID, "path", workspacePath)
 	}
 }
@@ -3091,7 +3091,7 @@ func (s *Server) deleteGroveAgents(ctx context.Context, grove *store.Grove) {
 
 	result, err := s.store.ListAgents(ctx, store.AgentFilter{GroveID: grove.ID}, store.ListOptions{Limit: 1000})
 	if err != nil {
-		slog.Warn("failed to list agents for grove deletion", "grove", grove.ID, "error", err)
+		s.agentLifecycleLog.Warn("failed to list agents for grove deletion", "grove", grove.ID, "error", err)
 		return
 	}
 
@@ -3102,7 +3102,7 @@ func (s *Server) deleteGroveAgents(ctx context.Context, grove *store.Grove) {
 		}
 		if dispatcher != nil && agent.RuntimeBrokerID != "" {
 			if err := dispatcher.DispatchAgentDelete(ctx, &agent, true, true, false, now); err != nil {
-				slog.Warn("failed to dispatch agent delete during grove deletion",
+				s.agentLifecycleLog.Warn("failed to dispatch agent delete during grove deletion",
 					"agent", agent.ID, "broker", agent.RuntimeBrokerID, "error", err)
 			}
 		}
@@ -4277,7 +4277,7 @@ func (s *Server) listEnvVars(w http.ResponseWriter, r *http.Request) {
 			Type:    "environment",
 		})
 		if err != nil {
-			slog.Warn("failed to list environment secrets for env var merge", "error", err)
+			s.envSecretLog.Warn("failed to list environment secrets for env var merge", "error", err)
 		} else {
 			// Build set of secret keys for deduplication
 			secretKeys := make(map[string]struct{}, len(metas))
@@ -4851,7 +4851,7 @@ func (s *Server) handleGroveEnvVars(w http.ResponseWriter, r *http.Request, grov
 				Type:    "environment",
 			})
 			if err != nil {
-				slog.Warn("failed to list environment secrets for grove env var merge", "error", err)
+				s.envSecretLog.Warn("failed to list environment secrets for grove env var merge", "error", err)
 			} else {
 				secretKeys := make(map[string]struct{}, len(metas))
 				for _, m := range metas {
@@ -5259,7 +5259,7 @@ func (s *Server) autoLinkProviders(ctx context.Context, grove *store.Grove) {
 		AutoProvide: &autoProvideTrue,
 	}, store.ListOptions{})
 	if err != nil {
-		slog.Warn("Failed to query auto-provide brokers", "grove", grove.ID, "error", err)
+		s.envSecretLog.Warn("Failed to query auto-provide brokers", "grove", grove.ID, "error", err)
 		return
 	}
 
@@ -5272,7 +5272,7 @@ func (s *Server) autoLinkProviders(ctx context.Context, grove *store.Grove) {
 			LinkedBy:   "auto-provide",
 		}
 		if addErr := s.store.AddGroveProvider(ctx, provider); addErr != nil {
-			slog.Warn("Failed to auto-link broker to grove",
+			s.envSecretLog.Warn("Failed to auto-link broker to grove",
 				"broker", autoBroker.Name, "grove", grove.ID, "error", addErr)
 			continue
 		}
@@ -5281,7 +5281,7 @@ func (s *Server) autoLinkProviders(ctx context.Context, grove *store.Grove) {
 		if grove.DefaultRuntimeBrokerID == "" {
 			grove.DefaultRuntimeBrokerID = autoBroker.ID
 			if updateErr := s.store.UpdateGrove(ctx, grove); updateErr != nil {
-				slog.Warn("Failed to set default runtime broker",
+				s.envSecretLog.Warn("Failed to set default runtime broker",
 					"broker", autoBroker.Name, "grove", grove.ID, "error", updateErr)
 			}
 		}
@@ -5492,7 +5492,7 @@ func (s *Server) handleBrokerEnvVars(w http.ResponseWriter, r *http.Request, bro
 				Type:    "environment",
 			})
 			if err != nil {
-				slog.Warn("failed to list environment secrets for broker env var merge", "error", err)
+				s.envSecretLog.Warn("failed to list environment secrets for broker env var merge", "error", err)
 			} else {
 				secretKeys := make(map[string]struct{}, len(metas))
 				for _, m := range metas {
@@ -5996,10 +5996,10 @@ func (s *Server) createNotifySubscription(ctx context.Context, agentID, groveID,
 		CreatedBy:         createdBy,
 	}
 	if err := s.store.CreateNotificationSubscription(ctx, sub); err != nil {
-		slog.Warn("Failed to create notification subscription",
+		s.agentLifecycleLog.Warn("Failed to create notification subscription",
 			"agentID", agentID, "subscriber", notifySubscriberID, "error", err)
 	} else {
-		slog.Debug("Created notification subscription",
+		s.agentLifecycleLog.Debug("Created notification subscription",
 			"subscriptionID", sub.ID, "agentID", agentID,
 			"subscriberType", notifySubscriberType, "subscriberID", notifySubscriberID)
 	}
@@ -6092,7 +6092,7 @@ func (s *Server) handleExistingAgent(
 		}
 		if err := s.store.UpdateAgent(ctx, existingAgent); err != nil {
 			// Log but continue — agent was started.
-			slog.Warn("Failed to update agent status after start", "error", err)
+			s.agentLifecycleLog.Warn("Failed to update agent status after start", "error", err)
 		}
 
 		// Create notification subscription if requested.
