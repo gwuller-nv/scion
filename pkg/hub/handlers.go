@@ -607,7 +607,10 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 					"agent", agent.Name, "broker", agent.RuntimeBrokerID)
 				envReqs, err := dispatcher.DispatchAgentCreateWithGather(ctx, agent)
 				if err != nil {
-					warnings = append(warnings, "Failed to dispatch to runtime broker: "+err.Error())
+					// Dispatch failed — clean up the agent record and return error
+					_ = s.store.DeleteAgent(ctx, agent.ID)
+					RuntimeError(w, "Failed to dispatch to runtime broker: "+err.Error())
+					return
 				} else if envReqs != nil {
 					// Broker returned 202: needs env gather
 					agent.Phase = string(state.PhaseProvisioning)
@@ -635,7 +638,10 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 			} else {
 				envReqs, err := dispatcher.DispatchAgentCreateWithGather(ctx, agent)
 				if err != nil {
-					warnings = append(warnings, "Failed to dispatch to runtime broker: "+err.Error())
+					// Dispatch failed — clean up the agent record and return error
+					_ = s.store.DeleteAgent(ctx, agent.ID)
+					RuntimeError(w, "Failed to dispatch to runtime broker: "+err.Error())
+					return
 				} else if envReqs != nil && len(envReqs.Needs) > 0 {
 					// Broker reported missing required env vars — fail the dispatch.
 					// Clean up the provisioning agent so it doesn't linger.
@@ -2647,7 +2653,10 @@ func (s *Server) createGroveAgent(w http.ResponseWriter, r *http.Request, groveI
 					"agent", agent.Name, "broker", agent.RuntimeBrokerID)
 				envReqs, err := dispatcher.DispatchAgentCreateWithGather(ctx, agent)
 				if err != nil {
-					warnings = append(warnings, "Failed to dispatch to runtime broker: "+err.Error())
+					// Dispatch failed — clean up the agent record and return error
+					_ = s.store.DeleteAgent(ctx, agent.ID)
+					RuntimeError(w, "Failed to dispatch to runtime broker: "+err.Error())
+					return
 				} else if envReqs != nil {
 					// Broker returned 202: needs env gather
 					agent.Phase = string(state.PhaseProvisioning)
@@ -2675,7 +2684,10 @@ func (s *Server) createGroveAgent(w http.ResponseWriter, r *http.Request, groveI
 			} else {
 				envReqs, err := dispatcher.DispatchAgentCreateWithGather(ctx, agent)
 				if err != nil {
-					warnings = append(warnings, "Failed to dispatch to runtime broker: "+err.Error())
+					// Dispatch failed — clean up the agent record and return error
+					_ = s.store.DeleteAgent(ctx, agent.ID)
+					RuntimeError(w, "Failed to dispatch to runtime broker: "+err.Error())
+					return
 				} else if envReqs != nil && len(envReqs.Needs) > 0 {
 					// Broker reported missing required env vars — fail the dispatch.
 					// Clean up the provisioning agent so it doesn't linger.

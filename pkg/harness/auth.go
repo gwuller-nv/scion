@@ -30,26 +30,41 @@ import (
 // It is source-agnostic: it checks env vars and well-known file paths
 // without knowing which harness will consume the result.
 func GatherAuth() api.AuthConfig {
+	return GatherAuthWithEnv(nil)
+}
+
+// GatherAuthWithEnv is like GatherAuth but checks the provided env overlay
+// before falling back to os.Getenv for each key. This allows hub-resolved
+// or CLI-gathered env vars (passed via opts.Env) to be visible during auth
+// resolution, even when the broker process itself lacks those env vars.
+func GatherAuthWithEnv(env map[string]string) api.AuthConfig {
+	lookup := func(key string) string {
+		if v, ok := env[key]; ok && v != "" {
+			return v
+		}
+		return os.Getenv(key)
+	}
+
 	home, _ := os.UserHomeDir()
 
 	auth := api.AuthConfig{
 		// Env-var sourced fields
-		GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
-		GoogleAPIKey:    os.Getenv("GOOGLE_API_KEY"),
-		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
-		OpenAIAPIKey:    os.Getenv("OPENAI_API_KEY"),
-		CodexAPIKey:     os.Getenv("CODEX_API_KEY"),
+		GeminiAPIKey:    lookup("GEMINI_API_KEY"),
+		GoogleAPIKey:    lookup("GOOGLE_API_KEY"),
+		AnthropicAPIKey: lookup("ANTHROPIC_API_KEY"),
+		OpenAIAPIKey:    lookup("OPENAI_API_KEY"),
+		CodexAPIKey:     lookup("CODEX_API_KEY"),
 		GoogleCloudProject: util.FirstNonEmpty(
-			os.Getenv("GOOGLE_CLOUD_PROJECT"),
-			os.Getenv("GCP_PROJECT"),
-			os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID"),
+			lookup("GOOGLE_CLOUD_PROJECT"),
+			lookup("GCP_PROJECT"),
+			lookup("ANTHROPIC_VERTEX_PROJECT_ID"),
 		),
 		GoogleCloudRegion: util.FirstNonEmpty(
-			os.Getenv("GOOGLE_CLOUD_REGION"),
-			os.Getenv("CLOUD_ML_REGION"),
-			os.Getenv("GOOGLE_CLOUD_LOCATION"),
+			lookup("GOOGLE_CLOUD_REGION"),
+			lookup("CLOUD_ML_REGION"),
+			lookup("GOOGLE_CLOUD_LOCATION"),
 		),
-		GoogleAppCredentials: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+		GoogleAppCredentials: lookup("GOOGLE_APPLICATION_CREDENTIALS"),
 	}
 
 	// File-sourced fields: check well-known paths

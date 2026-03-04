@@ -323,3 +323,126 @@ func TestValidateAuth_EmptyEnvVarsAndFiles(t *testing.T) {
 		t.Errorf("unexpected error for passthrough with no env/files: %v", err)
 	}
 }
+
+func TestGatherAuthWithEnv_OverlayTakesPrecedence(t *testing.T) {
+	// Set process env vars
+	t.Setenv("GEMINI_API_KEY", "process-gemini")
+	t.Setenv("ANTHROPIC_API_KEY", "process-anthropic")
+
+	// Overlay should win over process env
+	overlay := map[string]string{
+		"GEMINI_API_KEY": "overlay-gemini",
+	}
+
+	auth := GatherAuthWithEnv(overlay)
+
+	if auth.GeminiAPIKey != "overlay-gemini" {
+		t.Errorf("GeminiAPIKey = %q, want %q (overlay should take precedence)", auth.GeminiAPIKey, "overlay-gemini")
+	}
+	// Non-overlaid key should fall back to process env
+	if auth.AnthropicAPIKey != "process-anthropic" {
+		t.Errorf("AnthropicAPIKey = %q, want %q (should fall back to process env)", auth.AnthropicAPIKey, "process-anthropic")
+	}
+}
+
+func TestGatherAuthWithEnv_NilOverlay(t *testing.T) {
+	t.Setenv("GEMINI_API_KEY", "process-gemini")
+	t.Setenv("OPENAI_API_KEY", "process-openai")
+
+	// nil overlay should behave identically to GatherAuth
+	auth := GatherAuthWithEnv(nil)
+
+	if auth.GeminiAPIKey != "process-gemini" {
+		t.Errorf("GeminiAPIKey = %q, want %q", auth.GeminiAPIKey, "process-gemini")
+	}
+	if auth.OpenAIAPIKey != "process-openai" {
+		t.Errorf("OpenAIAPIKey = %q, want %q", auth.OpenAIAPIKey, "process-openai")
+	}
+}
+
+func TestGatherAuthWithEnv_EmptyOverlayValueFallsThrough(t *testing.T) {
+	t.Setenv("GEMINI_API_KEY", "process-gemini")
+
+	// Empty string in overlay should fall through to os.Getenv
+	overlay := map[string]string{
+		"GEMINI_API_KEY": "",
+	}
+
+	auth := GatherAuthWithEnv(overlay)
+
+	if auth.GeminiAPIKey != "process-gemini" {
+		t.Errorf("GeminiAPIKey = %q, want %q (empty overlay should fall through)", auth.GeminiAPIKey, "process-gemini")
+	}
+}
+
+func TestGatherAuthWithEnv_OverlayProjectFallbacks(t *testing.T) {
+	// Clear all project-related env vars from process
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "")
+	t.Setenv("GCP_PROJECT", "")
+	t.Setenv("ANTHROPIC_VERTEX_PROJECT_ID", "")
+
+	// Provide via overlay using the fallback key
+	overlay := map[string]string{
+		"GCP_PROJECT": "overlay-project",
+	}
+
+	auth := GatherAuthWithEnv(overlay)
+
+	if auth.GoogleCloudProject != "overlay-project" {
+		t.Errorf("GoogleCloudProject = %q, want %q (overlay fallback)", auth.GoogleCloudProject, "overlay-project")
+	}
+}
+
+func TestGatherAuthWithEnv_OverlayAllKeys(t *testing.T) {
+	// Clear all process env vars
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("CODEX_API_KEY", "")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "")
+	t.Setenv("GCP_PROJECT", "")
+	t.Setenv("ANTHROPIC_VERTEX_PROJECT_ID", "")
+	t.Setenv("GOOGLE_CLOUD_REGION", "")
+	t.Setenv("CLOUD_ML_REGION", "")
+	t.Setenv("GOOGLE_CLOUD_LOCATION", "")
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+
+	overlay := map[string]string{
+		"GEMINI_API_KEY":                 "ov-gemini",
+		"GOOGLE_API_KEY":                 "ov-google",
+		"ANTHROPIC_API_KEY":              "ov-anthropic",
+		"OPENAI_API_KEY":                 "ov-openai",
+		"CODEX_API_KEY":                  "ov-codex",
+		"GOOGLE_CLOUD_PROJECT":           "ov-project",
+		"GOOGLE_CLOUD_REGION":            "ov-region",
+		"GOOGLE_APPLICATION_CREDENTIALS": "/ov/creds.json",
+	}
+
+	auth := GatherAuthWithEnv(overlay)
+
+	if auth.GeminiAPIKey != "ov-gemini" {
+		t.Errorf("GeminiAPIKey = %q, want %q", auth.GeminiAPIKey, "ov-gemini")
+	}
+	if auth.GoogleAPIKey != "ov-google" {
+		t.Errorf("GoogleAPIKey = %q, want %q", auth.GoogleAPIKey, "ov-google")
+	}
+	if auth.AnthropicAPIKey != "ov-anthropic" {
+		t.Errorf("AnthropicAPIKey = %q, want %q", auth.AnthropicAPIKey, "ov-anthropic")
+	}
+	if auth.OpenAIAPIKey != "ov-openai" {
+		t.Errorf("OpenAIAPIKey = %q, want %q", auth.OpenAIAPIKey, "ov-openai")
+	}
+	if auth.CodexAPIKey != "ov-codex" {
+		t.Errorf("CodexAPIKey = %q, want %q", auth.CodexAPIKey, "ov-codex")
+	}
+	if auth.GoogleCloudProject != "ov-project" {
+		t.Errorf("GoogleCloudProject = %q, want %q", auth.GoogleCloudProject, "ov-project")
+	}
+	if auth.GoogleCloudRegion != "ov-region" {
+		t.Errorf("GoogleCloudRegion = %q, want %q", auth.GoogleCloudRegion, "ov-region")
+	}
+	if auth.GoogleAppCredentials != "/ov/creds.json" {
+		t.Errorf("GoogleAppCredentials = %q, want %q", auth.GoogleAppCredentials, "/ov/creds.json")
+	}
+}

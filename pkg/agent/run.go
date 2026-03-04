@@ -237,10 +237,30 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 	h := harness.New(harnessName)
 
 	// 3. Resolve credentials via new auth pipeline
+	// Inject environment-type resolved secrets into opts.Env before auth
+	// resolution so that hub-resolved credentials (from storage, secrets,
+	// or env-gather roundtrip) are visible to GatherAuthWithEnv.
+	for _, s := range opts.ResolvedSecrets {
+		if (s.Type == "environment" || s.Type == "") && s.Value != "" {
+			target := s.Target
+			if target == "" {
+				target = s.Name
+			}
+			if target != "" {
+				if opts.Env == nil {
+					opts.Env = make(map[string]string)
+				}
+				if _, exists := opts.Env[target]; !exists {
+					opts.Env[target] = s.Value
+				}
+			}
+		}
+	}
+
 	var auth api.AuthConfig
 	var resolvedAuth *api.ResolvedAuth
 	if !opts.NoAuth {
-		auth = harness.GatherAuth()
+		auth = harness.GatherAuthWithEnv(opts.Env)
 		harness.OverlaySettings(&auth, h, agentHome)
 		resolved, err := h.ResolveAuth(auth)
 		if err != nil {
@@ -383,28 +403,6 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 		for k, v := range telemetryEnv {
 			if _, exists := opts.Env[k]; !exists {
 				opts.Env[k] = v
-			}
-		}
-	}
-
-	// Inject environment-type resolved secrets into opts.Env so that
-	// buildAgentEnv validation sees them. Secrets are resolved by the Hub
-	// and passed in ResolvedSecrets, but buildAgentEnv only checks opts.Env.
-	// Without this, keys like GEMINI_API_KEY stored as hub secrets would
-	// fail validation even though the runtime would inject them later.
-	for _, s := range opts.ResolvedSecrets {
-		if (s.Type == "environment" || s.Type == "") && s.Value != "" {
-			target := s.Target
-			if target == "" {
-				target = s.Name
-			}
-			if target != "" {
-				if opts.Env == nil {
-					opts.Env = make(map[string]string)
-				}
-				if _, exists := opts.Env[target]; !exists {
-					opts.Env[target] = s.Value
-				}
 			}
 		}
 	}
