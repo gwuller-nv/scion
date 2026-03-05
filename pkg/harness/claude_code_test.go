@@ -502,6 +502,134 @@ func TestClaudeResolveAuth_NoCreds(t *testing.T) {
 	}
 }
 
+func TestClaudeApplyAuthSettings_APIKey(t *testing.T) {
+	agentHome := t.TempDir()
+	c := &ClaudeCode{}
+
+	// Seed an existing .claude.json
+	claudeJSONPath := filepath.Join(agentHome, ".claude.json")
+	os.WriteFile(claudeJSONPath, []byte(`{"numStartups":1}`), 0644)
+
+	apiKey := "REMOVED_API_KEY"
+	resolved := &api.ResolvedAuth{
+		Method:  "api-key",
+		EnvVars: map[string]string{"ANTHROPIC_API_KEY": apiKey},
+	}
+
+	if err := c.ApplyAuthSettings(agentHome, resolved); err != nil {
+		t.Fatalf("ApplyAuthSettings failed: %v", err)
+	}
+
+	data, err := os.ReadFile(claudeJSONPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]interface{}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify customApiKeyResponses was added
+	responses, ok := cfg["customApiKeyResponses"].(map[string]interface{})
+	if !ok {
+		t.Fatal("customApiKeyResponses not found or wrong type")
+	}
+	approved, ok := responses["approved"].([]interface{})
+	if !ok || len(approved) != 1 {
+		t.Fatalf("expected 1 approved entry, got %v", responses["approved"])
+	}
+	// Last 20 chars of the key
+	want := "BdRv1sHkmSw-k3bQnAAA"
+	if approved[0] != want {
+		t.Errorf("approved fingerprint = %q, want %q", approved[0], want)
+	}
+
+	// Verify existing fields preserved
+	if cfg["numStartups"] != float64(1) {
+		t.Errorf("existing field numStartups not preserved: %v", cfg["numStartups"])
+	}
+}
+
+func TestClaudeApplyAuthSettings_APIKey_NoExistingFile(t *testing.T) {
+	agentHome := t.TempDir()
+	c := &ClaudeCode{}
+
+	resolved := &api.ResolvedAuth{
+		Method:  "api-key",
+		EnvVars: map[string]string{"ANTHROPIC_API_KEY": "sk-ant-short-key12345"},
+	}
+
+	if err := c.ApplyAuthSettings(agentHome, resolved); err != nil {
+		t.Fatalf("ApplyAuthSettings failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(agentHome, ".claude.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]interface{}
+	json.Unmarshal(data, &cfg)
+
+	responses := cfg["customApiKeyResponses"].(map[string]interface{})
+	approved := responses["approved"].([]interface{})
+	if approved[0] != "k-ant-short-key12345" {
+		t.Errorf("fingerprint = %q, want %q", approved[0], "k-ant-short-key12345")
+	}
+}
+
+func TestClaudeApplyAuthSettings_ShortKey(t *testing.T) {
+	agentHome := t.TempDir()
+	c := &ClaudeCode{}
+
+	os.WriteFile(filepath.Join(agentHome, ".claude.json"), []byte(`{}`), 0644)
+
+	// Key shorter than 20 chars — use the whole key
+	resolved := &api.ResolvedAuth{
+		Method:  "api-key",
+		EnvVars: map[string]string{"ANTHROPIC_API_KEY": "short"},
+	}
+
+	if err := c.ApplyAuthSettings(agentHome, resolved); err != nil {
+		t.Fatalf("ApplyAuthSettings failed: %v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(agentHome, ".claude.json"))
+	var cfg map[string]interface{}
+	json.Unmarshal(data, &cfg)
+
+	approved := cfg["customApiKeyResponses"].(map[string]interface{})["approved"].([]interface{})
+	if approved[0] != "short" {
+		t.Errorf("fingerprint = %q, want %q", approved[0], "short")
+	}
+}
+
+func TestClaudeApplyAuthSettings_VertexAI_Noop(t *testing.T) {
+	agentHome := t.TempDir()
+	c := &ClaudeCode{}
+
+	claudeJSONPath := filepath.Join(agentHome, ".claude.json")
+	os.WriteFile(claudeJSONPath, []byte(`{"numStartups":1}`), 0644)
+
+	resolved := &api.ResolvedAuth{
+		Method: "vertex-ai",
+		EnvVars: map[string]string{
+			"CLAUDE_CODE_USE_VERTEX": "1",
+		},
+	}
+
+	if err := c.ApplyAuthSettings(agentHome, resolved); err != nil {
+		t.Fatalf("ApplyAuthSettings failed: %v", err)
+	}
+
+	data, _ := os.ReadFile(claudeJSONPath)
+	var cfg map[string]interface{}
+	json.Unmarshal(data, &cfg)
+
+	if _, exists := cfg["customApiKeyResponses"]; exists {
+		t.Error("customApiKeyResponses should not be set for vertex-ai")
+	}
+}
+
 func TestClaudeGetCommand_SystemPromptWithResume(t *testing.T) {
 	agentHome := t.TempDir()
 	c := &ClaudeCode{}

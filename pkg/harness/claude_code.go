@@ -205,6 +205,52 @@ func (c *ClaudeCode) provisionClaudeJSON(agentHome, agentWorkspace string) error
 	return os.WriteFile(claudeJSONPath, newData, 0644)
 }
 
+// ApplyAuthSettings updates .claude.json with customApiKeyResponses when using
+// api-key auth. This pre-approves the API key so Claude Code does not prompt
+// for confirmation.
+func (c *ClaudeCode) ApplyAuthSettings(agentHome string, resolved *api.ResolvedAuth) error {
+	if resolved.Method != "api-key" {
+		return nil
+	}
+	apiKey := resolved.EnvVars["ANTHROPIC_API_KEY"]
+	if apiKey == "" {
+		return nil
+	}
+
+	// Extract the last 20 characters of the key as the fingerprint.
+	fingerprint := apiKey
+	if len(fingerprint) > 20 {
+		fingerprint = fingerprint[len(fingerprint)-20:]
+	}
+
+	claudeJSONPath := filepath.Join(agentHome, ".claude.json")
+	var claudeCfg map[string]interface{}
+
+	data, err := os.ReadFile(claudeJSONPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to read .claude.json: %w", err)
+		}
+		claudeCfg = make(map[string]interface{})
+	} else {
+		if err := json.Unmarshal(data, &claudeCfg); err != nil {
+			return fmt.Errorf("failed to parse .claude.json: %w", err)
+		}
+	}
+
+	claudeCfg["customApiKeyResponses"] = map[string]interface{}{
+		"approved": []interface{}{fingerprint},
+		"rejected": []interface{}{},
+	}
+
+	newData, err := json.MarshalIndent(claudeCfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal updated .claude.json: %w", err)
+	}
+
+	return os.WriteFile(claudeJSONPath, newData, 0644)
+}
+
 func (c *ClaudeCode) GetEmbedDir() string {
 	return "claude"
 }
