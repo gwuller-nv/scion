@@ -144,6 +144,14 @@ func (h *LimitsHandler) incrementAndCheck(counterField string, limit int, limitN
 		return nil
 	}
 
+	// Report updated counts to Hub
+	hubHandler := NewHubHandler()
+	if hubHandler != nil {
+		if err := hubHandler.ReportCounts(ls.TurnCount, ls.ModelCallCount); err != nil {
+			log.Error("Failed to report counts to Hub: %v", err)
+		}
+	}
+
 	// Check if the limit is exceeded
 	if count >= limit {
 		message := fmt.Sprintf("%s of %d exceeded (completed %d)", limitName, limit, count)

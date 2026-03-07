@@ -156,6 +156,11 @@ type AgentStatusUpdate struct {
 	TaskSummary     string            `json:"taskSummary,omitempty"`
 	Heartbeat       bool              `json:"heartbeat,omitempty"`
 	Metadata        map[string]string `json:"metadata,omitempty"`
+
+	// Limits tracking (reported by sciontool)
+	CurrentTurns      *int   `json:"currentTurns,omitempty"`
+	CurrentModelCalls *int   `json:"currentModelCalls,omitempty"`
+	StartedAt         string `json:"startedAt,omitempty"`
 }
 
 // GroveStore defines grove-related persistence operations.

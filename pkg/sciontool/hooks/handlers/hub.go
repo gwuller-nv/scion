@@ -259,6 +259,22 @@ func (h *HubHandler) ReportLimitsExceeded(message string) error {
 	})
 }
 
+// ReportCounts sends current turn and model call counts to the Hub.
+func (h *HubHandler) ReportCounts(turnCount, modelCallCount int) error {
+	if h == nil || h.client == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	log.Debug("Hub: Reporting counts (turns=%d, model_calls=%d)", turnCount, modelCallCount)
+	return h.client.UpdateStatus(ctx, hub.StatusUpdate{
+		CurrentTurns:      &turnCount,
+		CurrentModelCalls: &modelCallCount,
+	})
+}
+
 // truncateMessage truncates a message to the specified length.
 func truncateMessage(msg string, maxLen int) string {
 	if len(msg) <= maxLen {

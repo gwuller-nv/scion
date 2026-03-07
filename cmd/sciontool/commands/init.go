@@ -323,10 +323,21 @@ func runInit(args []string) int {
 			os.Getenv("SCION_HUB_ENDPOINT"), os.Getenv("SCION_HUB_URL"), os.Getenv("SCION_AUTH_TOKEN") != "", os.Getenv("SCION_AGENT_ID"))
 		if hubClient != nil && hubClient.IsConfigured() {
 			hubCtx, hubCancel := context.WithTimeout(context.Background(), 10*time.Second)
-			if err := hubClient.ReportState(hubCtx, state.PhaseRunning, state.ActivityIdle, "Agent started"); err != nil {
+			startedAtStr := time.Now().UTC().Format(time.RFC3339)
+			zeroCount := 0
+			s := state.AgentState{Phase: state.PhaseRunning, Activity: state.ActivityIdle}
+			if err := hubClient.UpdateStatus(hubCtx, hub.StatusUpdate{
+				Phase:             state.PhaseRunning,
+				Activity:          state.ActivityIdle,
+				Status:            s.DisplayStatus(),
+				Message:           "Agent started",
+				StartedAt:         startedAtStr,
+				CurrentTurns:      &zeroCount,
+				CurrentModelCalls: &zeroCount,
+			}); err != nil {
 				log.Error("Failed to report running status to Hub: %v", err)
 			} else {
-				log.Info("Reported running status to Hub")
+				log.Info("Reported running status to Hub (startedAt=%s)", startedAtStr)
 			}
 			hubCancel()
 

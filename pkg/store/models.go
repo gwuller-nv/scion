@@ -46,6 +46,11 @@ type Agent struct {
 	ContainerStatus string `json:"containerStatus,omitempty"` // Container-level status
 	RuntimeState    string `json:"runtimeState,omitempty"`    // Low-level runtime state
 
+	// Limits tracking (updated by sciontool status reports)
+	CurrentTurns      int       `json:"currentTurns,omitempty"`
+	CurrentModelCalls int       `json:"currentModelCalls,omitempty"`
+	StartedAt         time.Time `json:"startedAt,omitempty"`
+
 	// Stalled detection
 	StalledFromActivity string `json:"stalledFromActivity,omitempty"` // Activity before stalled; empty when not stalled
 
