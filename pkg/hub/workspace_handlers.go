@@ -145,15 +145,36 @@ func (s *Server) handleWorkspaceRoutes(w http.ResponseWriter, r *http.Request, a
 	}
 }
 
-// handleWorkspaceStatus returns the current workspace sync status.
-// GET /api/v1/agents/{id}/workspace
-func (s *Server) handleWorkspaceStatus(w http.ResponseWriter, r *http.Request, agentID string) {
+// getAuthorizedWorkspaceAgent loads the agent and enforces the required user permission.
+func (s *Server) getAuthorizedWorkspaceAgent(w http.ResponseWriter, r *http.Request, agentID string, requiredAction Action) *store.Agent {
 	ctx := r.Context()
 
-	// Validate agent exists
 	agent, err := s.store.GetAgent(ctx, agentID)
 	if err != nil {
 		writeErrorFromErr(w, err, "")
+		return nil
+	}
+
+	userIdent := GetUserIdentityFromContext(ctx)
+	if userIdent == nil {
+		writeError(w, http.StatusForbidden, ErrCodeForbidden, "This action requires user authentication", nil)
+		return nil
+	}
+
+	decision := s.authzService.CheckAccess(ctx, userIdent, agentResource(agent), requiredAction)
+	if !decision.Allowed {
+		writeError(w, http.StatusForbidden, ErrCodeForbidden, "Access denied", nil)
+		return nil
+	}
+
+	return agent
+}
+
+// handleWorkspaceStatus returns the current workspace sync status.
+// GET /api/v1/agents/{id}/workspace
+func (s *Server) handleWorkspaceStatus(w http.ResponseWriter, r *http.Request, agentID string) {
+	agent := s.getAuthorizedWorkspaceAgent(w, r, agentID, ActionRead)
+	if agent == nil {
 		return
 	}
 
@@ -193,10 +214,8 @@ func (s *Server) handleWorkspaceSyncFrom(w http.ResponseWriter, r *http.Request,
 		}
 	}
 
-	// Validate agent exists
-	agent, err := s.store.GetAgent(ctx, agentID)
-	if err != nil {
-		writeErrorFromErr(w, err, "")
+	agent := s.getAuthorizedWorkspaceAgent(w, r, agentID, ActionUpdate)
+	if agent == nil {
 		return
 	}
 
@@ -299,10 +318,8 @@ func (s *Server) handleWorkspaceSyncTo(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 
-	// Validate agent exists
-	agent, err := s.store.GetAgent(ctx, agentID)
-	if err != nil {
-		writeErrorFromErr(w, err, "")
+	agent := s.getAuthorizedWorkspaceAgent(w, r, agentID, ActionUpdate)
+	if agent == nil {
 		return
 	}
 
@@ -386,10 +403,8 @@ func (s *Server) handleWorkspaceSyncToFinalize(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Validate agent exists
-	agent, err := s.store.GetAgent(ctx, agentID)
-	if err != nil {
-		writeErrorFromErr(w, err, "")
+	agent := s.getAuthorizedWorkspaceAgent(w, r, agentID, ActionUpdate)
+	if agent == nil {
 		return
 	}
 
@@ -628,7 +643,7 @@ func errRuntimeBrokerError(statusCode int, body string) error {
 
 // brokerError represents an error from communication with a runtime broker.
 type brokerError struct {
-	brokerID     string
+	brokerID   string
 	statusCode int
 	msg        string
 }
