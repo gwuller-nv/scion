@@ -18,12 +18,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/ptone/scion-agent/pkg/api"
 )
-
-const codexNotifyCommand = "sh ~/.codex/scion_notify.sh"
 
 func (c *Codex) reconcileConfig(agentHome string, telemetry *api.TelemetryConfig, env map[string]string) error {
 	codexDir := filepath.Join(agentHome, ".codex")
@@ -39,29 +38,45 @@ func (c *Codex) reconcileConfig(agentHome string, telemetry *api.TelemetryConfig
 		return fmt.Errorf("failed to read codex config: %w", err)
 	}
 
-	// Always wire Scion's notify bridge.
-	content = upsertTOMLKey(content, "", "notify", `"`+codexNotifyCommand+`"`)
+	// Remove existing [otel] section — it will be rebuilt only if telemetry is enabled.
+	content = removeTOMLSection(content, "otel")
 
 	// Reconcile [otel] only when telemetry is enabled.
 	if telemetry != nil && (telemetry.Enabled == nil || *telemetry.Enabled) {
 		endpoint := resolveCodexOTELEndpoint(telemetry, env)
 		protocol := resolveCodexOTELProtocol(telemetry, env)
 
-		content = upsertTOMLKey(content, "otel", "enabled", "true")
-		content = upsertTOMLKey(content, "otel", "exporter", `"otlp"`)
-		content = upsertTOMLKey(content, "otel", "endpoint", `"`+endpoint+`"`)
-		content = upsertTOMLKey(content, "otel", "protocol", `"`+protocol+`"`)
-
-		// Preserve Scion prompt-privacy defaults in Codex when an explicit event
-		// filter includes/excludes agent.user.prompt.
+		logUserPrompt := false
 		if telemetry.Filter != nil && telemetry.Filter.Events != nil {
-			if listContains(telemetry.Filter.Events.Exclude, "agent.user.prompt") {
-				content = upsertTOMLKey(content, "otel", "log_user_prompts", "false")
-			}
 			if listContains(telemetry.Filter.Events.Include, "agent.user.prompt") {
-				content = upsertTOMLKey(content, "otel", "log_user_prompts", "true")
+				logUserPrompt = true
+			}
+			if listContains(telemetry.Filter.Events.Exclude, "agent.user.prompt") {
+				logUserPrompt = false
 			}
 		}
+
+		// Build exporter key based on protocol.
+		exporterKey := "otlp-grpc"
+		if protocol == "http" || protocol == "http/protobuf" {
+			exporterKey = "otlp-http"
+		}
+
+		// Build headers inline table.
+		headers := ""
+		if telemetry.Cloud != nil && len(telemetry.Cloud.Headers) > 0 {
+			parts := make([]string, 0, len(telemetry.Cloud.Headers))
+			for k, v := range telemetry.Cloud.Headers {
+				parts = append(parts, fmt.Sprintf(`"%s" = "%s"`, k, v))
+			}
+			sort.Strings(parts)
+			headers = fmt.Sprintf(",\n  headers = { %s }", strings.Join(parts, ", "))
+		}
+
+		otelSection := fmt.Sprintf("[otel]\nenabled = true\nlog_user_prompt = %v\nexporter = { %s = {\n  endpoint = \"%s\"%s\n}}\n",
+			logUserPrompt, exporterKey, endpoint, headers)
+
+		content = strings.TrimRight(content, "\n\t ") + "\n\n" + otelSection
 	}
 
 	return os.WriteFile(configPath, []byte(strings.TrimSpace(content)+"\n"), 0644)
@@ -118,6 +133,41 @@ func listContains(items []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func removeTOMLSection(content, section string) string {
+	lines := strings.Split(content, "\n")
+	target := "[" + section + "]"
+
+	sectionStart := -1
+	sectionEnd := len(lines)
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == target {
+			sectionStart = i
+			for j := i + 1; j < len(lines); j++ {
+				t := strings.TrimSpace(lines[j])
+				if strings.HasPrefix(t, "[") && strings.HasSuffix(t, "]") {
+					sectionEnd = j
+					break
+				}
+			}
+			break
+		}
+	}
+
+	if sectionStart == -1 {
+		return content
+	}
+
+	// Also consume blank lines immediately before the section header.
+	for sectionStart > 0 && strings.TrimSpace(lines[sectionStart-1]) == "" {
+		sectionStart--
+	}
+
+	result := append(lines[:sectionStart], lines[sectionEnd:]...)
+	return strings.Join(result, "\n")
 }
 
 func upsertTOMLKey(content, section, key, value string) string {

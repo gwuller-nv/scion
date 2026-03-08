@@ -207,6 +207,7 @@ trust_level = "trusted"
 		Cloud: &api.TelemetryCloudConfig{
 			Endpoint: "collector.example.com:4317",
 			Protocol: "grpc",
+			Headers: map[string]string{"x-api-key": "test123"},
 		},
 	}
 	err := c.ApplyTelemetrySettings(agentHome, telemetry, nil)
@@ -217,30 +218,49 @@ trust_level = "trusted"
 	out := string(data)
 	containsAll(t, out,
 		`custom_key = "keep-me"`,
-		`notify = "sh ~/.codex/scion_notify.sh"`,
 		`[otel]`,
 		`enabled = true`,
-		`exporter = "otlp"`,
+		`log_user_prompt = false`,
+		`exporter = { otlp-grpc = {`,
 		`endpoint = "collector.example.com:4317"`,
-		`protocol = "grpc"`,
+		`headers = { "x-api-key" = "test123" }`,
 	)
+	if strings.Contains(out, "notify") {
+		t.Fatalf("should not inject notify script, got:\n%s", out)
+	}
 }
 
 func TestCodexApplyTelemetrySettings_DisabledDoesNotInjectOtel(t *testing.T) {
 	agentHome := t.TempDir()
 	c := &Codex{}
+
+	// Seed a config that already has an [otel] section to verify it gets removed.
+	codexDir := filepath.Join(agentHome, ".codex")
+	requireNoErr(t, os.MkdirAll(codexDir, 0755))
+	initial := `approval_policy = "never"
+
+[otel]
+enabled = false
+exporter = { otlp-grpc = {
+  endpoint = "localhost:4317"
+}}
+`
+	requireNoErr(t, os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(initial), 0644))
+
 	enabled := false
 	telemetry := &api.TelemetryConfig{Enabled: &enabled}
 
 	err := c.ApplyTelemetrySettings(agentHome, telemetry, nil)
 	requireNoErr(t, err)
 
-	data, err := os.ReadFile(filepath.Join(agentHome, ".codex", "config.toml"))
+	data, err := os.ReadFile(filepath.Join(codexDir, "config.toml"))
 	requireNoErr(t, err)
 	out := string(data)
-	containsAll(t, out, `notify = "sh ~/.codex/scion_notify.sh"`)
 	if strings.Contains(out, "[otel]") {
 		t.Fatalf("did not expect [otel] section when telemetry disabled, got:\n%s", out)
+	}
+	if strings.Contains(out, "notify") {
+		t.Fatalf("should not inject notify script, got:\n%s", out)
 	}
 }
 
@@ -269,7 +289,43 @@ func TestCodexProvision_ReconcilesTelemetryFromScionAgentConfig(t *testing.T) {
 
 	out, err := os.ReadFile(filepath.Join(agentHome, ".codex", "config.toml"))
 	requireNoErr(t, err)
-	containsAll(t, string(out), `[otel]`, `endpoint = "otel.local:4317"`)
+	containsAll(t, string(out), `[otel]`, `endpoint = "otel.local:4317"`, `enabled = true`, `log_user_prompt = false`)
+}
+
+func TestCodexApplyTelemetrySettings_LogUserPromptFromFilter(t *testing.T) {
+	agentHome := t.TempDir()
+	c := &Codex{}
+
+	enabled := true
+	telemetry := &api.TelemetryConfig{
+		Enabled: &enabled,
+		Cloud: &api.TelemetryCloudConfig{
+			Endpoint: "collector.example.com:4317",
+			Protocol: "grpc",
+		},
+		Filter: &api.TelemetryFilterConfig{
+			Events: &api.TelemetryEventsConfig{
+				Include: []string{"agent.user.prompt"},
+			},
+		},
+	}
+	err := c.ApplyTelemetrySettings(agentHome, telemetry, nil)
+	requireNoErr(t, err)
+
+	data, err := os.ReadFile(filepath.Join(agentHome, ".codex", "config.toml"))
+	requireNoErr(t, err)
+	out := string(data)
+	containsAll(t, out, `log_user_prompt = true`)
+
+	// Now test exclusion takes precedence over inclusion.
+	telemetry.Filter.Events.Exclude = []string{"agent.user.prompt"}
+	err = c.ApplyTelemetrySettings(agentHome, telemetry, nil)
+	requireNoErr(t, err)
+
+	data, err = os.ReadFile(filepath.Join(agentHome, ".codex", "config.toml"))
+	requireNoErr(t, err)
+	out = string(data)
+	containsAll(t, out, `log_user_prompt = false`)
 }
 
 func requireNoErr(t *testing.T, err error) {
