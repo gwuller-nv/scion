@@ -253,7 +253,8 @@ export class ScionPageAgents extends LitElement {
 
   private async handleAgentAction(
     agentId: string,
-    action: 'start' | 'stop' | 'delete'
+    action: 'start' | 'stop' | 'delete',
+    event?: MouseEvent
   ): Promise<void> {
     this.actionLoading = { ...this.actionLoading, [agentId]: true };
 
@@ -272,7 +273,7 @@ export class ScionPageAgents extends LitElement {
           });
           break;
         case 'delete':
-          if (!confirm('Are you sure you want to delete this agent?')) {
+          if (!event?.altKey && !confirm('Are you sure you want to delete this agent?')) {
             this.actionLoading = { ...this.actionLoading, [agentId]: false };
             return;
           }
@@ -524,7 +525,7 @@ export class ScionPageAgents extends LitElement {
               outline
               ?loading=${isLoading}
               ?disabled=${isLoading}
-              @click=${() => this.handleAgentAction(agent.id, 'delete')}
+              @click=${(e: MouseEvent) => this.handleAgentAction(agent.id, 'delete', e)}
             >
               <sl-icon slot="prefix" name="trash"></sl-icon>
             </sl-button>
@@ -623,7 +624,7 @@ export class ScionPageAgents extends LitElement {
                 outline
                 ?loading=${isLoading}
                 ?disabled=${isLoading}
-                @click=${() => this.handleAgentAction(agent.id, 'delete')}
+                @click=${(e: MouseEvent) => this.handleAgentAction(agent.id, 'delete', e)}
               >
                 <sl-icon slot="prefix" name="trash"></sl-icon>
               </sl-button>
