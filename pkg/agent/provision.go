@@ -185,6 +185,10 @@ func ProvisionAgent(ctx context.Context, agentName string, templateName string, 
 				if !util.IsIgnored(agentsPath + "/") {
 					return "", "", nil, fmt.Errorf("security error: '%s/' must be in .gitignore when using a project-local grove", agentsPath)
 				}
+				// Warn if the entire .scion directory is not gitignored
+				if !util.IsIgnored(rel + "/") {
+					fmt.Fprintf(os.Stderr, "Warning: '%s/' is not in .gitignore. Run 'scion init' to fix this.\n", rel)
+				}
 			}
 		}
 	}

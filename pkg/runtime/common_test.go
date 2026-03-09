@@ -782,6 +782,63 @@ func TestWriteRuntimeDebugFile(t *testing.T) {
 	})
 }
 
+func TestScionDirShadowedWhenFullRepoMounted(t *testing.T) {
+	// When the full repo root is mounted (workspace outside repo root),
+	// a tmpfs shadow mount should be added over /repo-root/.scion to
+	// prevent agents from accessing other agents' secrets.
+	args, err := buildCommonRunArgs(RunConfig{
+		Harness:      &harness.GeminiCLI{},
+		Name:         "test-agent",
+		UnixUsername: "scion",
+		Image:        "scion-agent:latest",
+		RepoRoot:     "/home/user/repo",
+		Workspace:    "/some/external/workspace", // outside repo root
+	})
+	if err != nil {
+		t.Fatalf("buildCommonRunArgs failed: %v", err)
+	}
+
+	argStr := strings.Join(args, " ")
+
+	// Should have the full repo root mount
+	if !strings.Contains(argStr, "-v /home/user/repo:/repo-root") {
+		t.Errorf("expected full repo root mount, got: %s", argStr)
+	}
+
+	// Should have the tmpfs shadow over .scion
+	if !strings.Contains(argStr, "--mount type=tmpfs,destination=/repo-root/.scion") {
+		t.Errorf("expected tmpfs shadow mount over .scion, got: %s", argStr)
+	}
+}
+
+func TestScionDirNotShadowedWhenWorkspaceInsideRepo(t *testing.T) {
+	// When the workspace is inside the repo root, .git and workspace are
+	// mounted separately (no full repo mount), so no tmpfs shadow is needed.
+	args, err := buildCommonRunArgs(RunConfig{
+		Harness:      &harness.GeminiCLI{},
+		Name:         "test-agent",
+		UnixUsername: "scion",
+		Image:        "scion-agent:latest",
+		RepoRoot:     "/home/user/repo",
+		Workspace:    "/home/user/repo/.scion/agents/test/workspace",
+	})
+	if err != nil {
+		t.Fatalf("buildCommonRunArgs failed: %v", err)
+	}
+
+	argStr := strings.Join(args, " ")
+
+	// Should NOT have the full repo root mount
+	if strings.Contains(argStr, "-v /home/user/repo:/repo-root ") {
+		t.Errorf("expected no full repo root mount, got: %s", argStr)
+	}
+
+	// Should NOT have the tmpfs shadow
+	if strings.Contains(argStr, "tmpfs") {
+		t.Errorf("expected no tmpfs shadow mount, got: %s", argStr)
+	}
+}
+
 func TestGcloudMountSkippedInBrokerMode(t *testing.T) {
 	// In broker mode, the gcloud auto-mount should be skipped to avoid
 	// leaking the broker operator's GCP credentials into agent containers.

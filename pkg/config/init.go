@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/ptone/scion-agent/pkg/api"
@@ -360,6 +361,14 @@ func InitProject(targetDir string, harnesses []api.Harness, opts ...InitProjectO
 		}
 	}
 
+	// Enforce .scion in .gitignore for git repos
+	if util.IsGitRepo() {
+		root, err := util.RepoRoot()
+		if err == nil {
+			_ = EnsureScionGitignore(root)
+		}
+	}
+
 	// Create grove-level settings file if it doesn't exist
 	if err := os.MkdirAll(projectDir, 0755); err != nil {
 		return fmt.Errorf("failed to create settings directory: %w", err)
@@ -504,4 +513,34 @@ func ensureBrokerID(globalDir string) error {
 // InitGlobal is an alias for InitMachine, kept for backward compatibility.
 func InitGlobal(harnesses []api.Harness, opts ...InitMachineOpts) error {
 	return InitMachine(harnesses, opts...)
+}
+
+// EnsureScionGitignore ensures that .scion/ is listed in the .gitignore file
+// at the given repo root. If .scion or .scion/ is already ignored by any
+// pattern, this is a no-op.
+func EnsureScionGitignore(repoRoot string) error {
+	gitignorePath := filepath.Join(repoRoot, ".gitignore")
+
+	content, err := os.ReadFile(gitignorePath)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	// Check if .scion is already covered by an existing pattern
+	for _, line := range strings.Split(string(content), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == ".scion" || trimmed == ".scion/" || trimmed == "/.scion" || trimmed == "/.scion/" {
+			return nil
+		}
+	}
+
+	// Append .scion/ to .gitignore
+	var newContent string
+	if len(content) > 0 && content[len(content)-1] != '\n' {
+		newContent = string(content) + "\n.scion/\n"
+	} else {
+		newContent = string(content) + ".scion/\n"
+	}
+
+	return os.WriteFile(gitignorePath, []byte(newContent), 0644)
 }

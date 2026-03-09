@@ -146,6 +146,7 @@ func buildCommonRunArgs(config RunConfig) ([]string, error) {
 	if config.HomeDir != "" {
 		registerMount(config.HomeDir, util.GetHomeDir(config.UnixUsername), false, true)
 	}
+	fullRepoRootMounted := false
 	if config.GitClone != nil {
 		// Git clone mode: mount the host-side workspace directory so the
 		// cloned repo is visible on the host for debugging and persistence.
@@ -169,6 +170,7 @@ func buildCommonRunArgs(config RunConfig) ([]string, error) {
 			registerMount(config.RepoRoot, "/repo-root", false, true)
 			registerMount(config.Workspace, "/workspace", false, true)
 			addArg("--workdir", "/workspace")
+			fullRepoRootMounted = true
 		}
 	} else if config.Workspace != "" {
 		registerMount(config.Workspace, "/workspace", false, true)
@@ -280,6 +282,13 @@ func buildCommonRunArgs(config RunConfig) ([]string, error) {
 	// Add all registered volumes
 	for _, tgt := range volumeOrder {
 		addArg("-v", volumeMap[tgt])
+	}
+
+	// Shadow the .scion directory with a tmpfs when the full repo root is
+	// mounted into the container. This prevents agents from accessing other
+	// agents' home directories and secrets via the host filesystem.
+	if fullRepoRootMounted {
+		addArg("--mount", "type=tmpfs,destination=/repo-root/.scion")
 	}
 
 	if len(fuseMounts) > 0 {
