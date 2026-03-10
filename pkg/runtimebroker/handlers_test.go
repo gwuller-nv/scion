@@ -1962,6 +1962,43 @@ func TestStartAgentResolvedEnvHubEndpointFallback(t *testing.T) {
 	}
 }
 
+// TestStartAgentResolvedEnvHubURLFallback verifies legacy parity: when the broker
+// has no HubEndpoint configured, SCION_HUB_URL from resolvedEnv is accepted as
+// the fallback endpoint in the start path.
+func TestStartAgentResolvedEnvHubURLFallback(t *testing.T) {
+	cfg := DefaultServerConfig()
+	cfg.BrokerID = "test-broker-id"
+	cfg.BrokerName = "test-host"
+	cfg.HubEndpoint = ""
+	cfg.Debug = true
+
+	mgr := &provisionCapturingManager{}
+	rt := &runtime.MockRuntime{}
+	srv := New(cfg, mgr, rt)
+
+	body := `{"resolvedEnv": {"SCION_HUB_URL": "http://hub.example.com:9090"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/test-agent/start", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusAccepted, w.Code, w.Body.String())
+	}
+
+	if !mgr.startCalled {
+		t.Fatal("expected Start to be called")
+	}
+
+	if got := mgr.lastOpts.Env["SCION_HUB_ENDPOINT"]; got != "http://hub.example.com:9090" {
+		t.Errorf("expected SCION_HUB_ENDPOINT='http://hub.example.com:9090' from SCION_HUB_URL fallback, got %q", got)
+	}
+	if got := mgr.lastOpts.Env["SCION_HUB_URL"]; got != "http://hub.example.com:9090" {
+		t.Errorf("expected SCION_HUB_URL='http://hub.example.com:9090', got %q", got)
+	}
+}
+
 // TestStartAgentResolvedEnvHubEndpointWithContainerOverride verifies that when
 // the hub endpoint from resolvedEnv is localhost, the ContainerHubEndpoint
 // override is applied.

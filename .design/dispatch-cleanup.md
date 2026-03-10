@@ -140,3 +140,55 @@ If only a few things are done first, prioritize:
 4. Consolidate duplicated create/dispatch logic.
 
 These four changes will materially improve robustness, reliability, and future debugability with moderate implementation effort.
+
+## Hub Agent Env Context Flow
+
+### Authoritative Data Path
+1. `cmd/server.go` determines Hub/broker wiring and runtime-broker endpoint.
+2. `pkg/hub/httpdispatcher.go` dispatches create/start payloads and sets Hub-derived env context.
+3. `pkg/runtimebroker/handlers.go` merges request env + broker/grove fallbacks and applies container bridge overrides.
+4. `pkg/agent/run.go` applies final agent-level config/env overrides before launching runtime containers.
+
+### Field Ownership
+- `SCION_HUB_ENDPOINT` / `SCION_HUB_URL`:
+  - authoritative from dispatch/broker input when present
+  - falls back to broker config, then grove settings
+  - localhost endpoints may be rewritten to `ContainerHubEndpoint` for containerized runtimes (non-kubernetes)
+- `SCION_GROVE_ID`, `SCION_AGENT_ID`, `SCION_AGENT_SLUG`:
+  - authoritative from Hub dispatch and broker route context
+- `SCION_AUTH_TOKEN` and other secret values:
+  - authoritative from Hub-resolved secrets/tokens (or explicit broker fallback token)
+  - values must be redacted in broker debug logs
+
+### Why Local Settings Are Sometimes Ignored
+In Hub-connected container flows, local grove settings may not represent the active Hub endpoint (for example, combo/hub-native routing or remote broker dispatch). In that mode, dispatch/broker authoritative inputs intentionally take precedence over stale local settings.
+
+## Troubleshooting Matrix
+
+### "Hub is enabled but no endpoint configured"
+- Typical cause: Hub mode enabled with no `--hub`, `SCION_HUB_ENDPOINT`, or `hub.endpoint`.
+- Check: `scion config get hub.endpoint`, `echo $SCION_HUB_ENDPOINT`.
+- Fix: set endpoint explicitly or disable Hub mode for local-only workflows.
+
+### Agent in container cannot reach localhost Hub endpoint
+- Typical cause: endpoint resolves to `http://localhost:*` inside containerized runtime.
+- Check: broker config `ContainerHubEndpoint` and final env in broker debug logs.
+- Fix: configure `ContainerHubEndpoint` bridge host; ensure runtime is non-kubernetes if expecting rewrite.
+
+### Stale remote endpoint overrides combo-mode endpoint
+- Typical cause: older grove settings with a persisted endpoint conflicting with active dispatch/broker endpoint.
+- Check: dispatcher payload endpoint vs grove `settings.yaml`.
+- Fix: rely on dispatch/broker authoritative endpoint; clean stale grove endpoint if no longer valid.
+
+### Hub env unexpectedly stripped
+- Typical cause: grove or profile explicitly disables Hub (`hub.enabled=false` / `hub.local_only=true`).
+- Check: effective settings and env before `pkg/agent/run.go` final merge.
+- Fix: re-enable Hub in settings for that grove/profile or run explicitly with `--no-hub` when local-only is intended.
+
+## Regression Test Matrix
+- Broker has `HubEndpoint` configured vs empty.
+- Dispatcher sends endpoint in request vs relies on resolved env vs neither.
+- `resolvedEnv` includes `SCION_HUB_ENDPOINT` vs legacy `SCION_HUB_URL`.
+- Grove settings endpoint present vs absent vs `hub.enabled=false`.
+- Runtime type `docker`/`podman` vs `kubernetes` for bridge rewrite behavior.
+- Localhost endpoints vs non-localhost endpoints for container override checks.

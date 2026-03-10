@@ -49,7 +49,7 @@ var logsCmd = &cobra.Command{
 		agentName := api.Slugify(args[0])
 
 		// Check if Hub is enabled
-		hubCtx, err := CheckHubAvailabilitySimple(grovePath)
+		hubCtx, err := CheckHubAvailabilityWithOptions(grovePath, true)
 		if err != nil {
 			return err
 		}

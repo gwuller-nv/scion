@@ -80,7 +80,7 @@ var harnessConfigListCmd = &cobra.Command{
 
 		// Include Hub results if requested
 		if showHub {
-			hubCtx, err := CheckHubAvailabilitySimple(gp)
+			hubCtx, err := CheckHubAvailabilityWithOptions(gp, true)
 			if err == nil {
 				hubResp, err := hubCtx.Client.HarnessConfigs().List(context.Background(), &hubclient.ListHarnessConfigsOptions{
 					Status: "active",
@@ -211,7 +211,7 @@ var harnessConfigSyncCmd = &cobra.Command{
 			return fmt.Errorf("harness-config %q not found: %w", name, err)
 		}
 
-		hubCtx, err := CheckHubAvailabilitySimple(gp)
+		hubCtx, err := CheckHubAvailabilityWithOptions(gp, true)
 		if err != nil {
 			return err
 		}
@@ -253,7 +253,7 @@ var harnessConfigPullCmd = &cobra.Command{
 			gp = projectDir
 		}
 
-		hubCtx, err := CheckHubAvailabilitySimple(gp)
+		hubCtx, err := CheckHubAvailabilityWithOptions(gp, true)
 		if err != nil {
 			return err
 		}
@@ -327,7 +327,7 @@ var harnessConfigShowCmd = &cobra.Command{
 		}
 
 		// Try Hub
-		hubCtx, err := CheckHubAvailabilitySimple(gp)
+		hubCtx, err := CheckHubAvailabilityWithOptions(gp, true)
 		if err != nil {
 			return fmt.Errorf("harness-config %q not found locally and Hub unavailable: %w", name, err)
 		}
@@ -381,7 +381,7 @@ var harnessConfigDeleteCmd = &cobra.Command{
 			gp = projectDir
 		}
 
-		hubCtx, err := CheckHubAvailabilitySimple(gp)
+		hubCtx, err := CheckHubAvailabilityWithOptions(gp, true)
 		if err != nil {
 			return err
 		}
