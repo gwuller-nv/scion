@@ -16,7 +16,7 @@
 set -e
 
 # Ensure Hub is enabled for the grove
-cd /Users/ptone/src/cli-projects/qa-scion
+cd /Users/user/src/cli-projects/qa-scion
 
 scion hub enable
 

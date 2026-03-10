@@ -50,7 +50,7 @@ env: {
   GOOGLE_CLOUD_LOCATION:""
 },
 volumes: {
-  /Users/ptone/.config/gcloud:/home/node/.config/gcloud:ro
+  /Users/user/.config/gcloud:/home/node/.config/gcloud:ro
 }
 
 As a general rule for environment variables, if the key is in a settings file, and the value is not in the environment, a warning should be printed, but not cause a fatal error.

@@ -23,7 +23,7 @@ import (
 
 func setupGitRepo(t *testing.T) string {
 	dir := t.TempDir()
-	
+
 	// Initialize git repo
 	cmd := exec.Command("git", "init")
 	cmd.Dir = dir
@@ -52,7 +52,7 @@ func setupGitRepo(t *testing.T) string {
 func TestGitUtils(t *testing.T) {
 	// Need to be inside the repo for most tests
 	repoDir := setupGitRepo(t)
-	
+
 	// Save current working dir to restore later
 	originalWd, err := os.Getwd()
 	if err != nil {
@@ -80,7 +80,7 @@ func TestGitUtils(t *testing.T) {
 		// We resolve both to compare safely.
 		evalRoot, _ := filepath.EvalSymlinks(root)
 		evalRepoDir, _ := filepath.EvalSymlinks(repoDir)
-		
+
 		if evalRoot != evalRepoDir {
 			t.Errorf("expected root %q, got %q", evalRepoDir, evalRoot)
 		}
@@ -91,11 +91,11 @@ func TestGitUtils(t *testing.T) {
 		if err := os.WriteFile(ignoreFile, []byte("ignored.txt"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		
+
 		if !IsIgnored("ignored.txt") {
 			t.Error("expected ignored.txt to be ignored")
 		}
-		
+
 		if IsIgnored("not-ignored.txt") {
 			t.Error("expected not-ignored.txt to NOT be ignored")
 		}
@@ -117,7 +117,7 @@ func TestGitUtils(t *testing.T) {
 		// Remove
 		if _, err := RemoveWorktree(worktreePath, false); err != nil {
 			t.Fatalf("RemoveWorktree failed: %v", err)
-		}		
+		}
 		// Wait/Check? git worktree remove deletes the directory usually.
 		if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
 			t.Errorf("worktree dir still exists after removal")
@@ -281,12 +281,12 @@ func TestGitUtils(t *testing.T) {
 			remote string
 			want   string
 		}{
-			{"https://github.com/ptone/scion.git", "github.com/ptone/scion"},
-			{"http://github.com/ptone/scion.git", "github.com/ptone/scion"},
-			{"git@github.com:ptone/scion.git", "github.com/ptone/scion"},
-			{"github.com/ptone/scion.git", "github.com/ptone/scion"},
-			{"git@github.com:ptone/scion", "github.com/ptone/scion"},
-			{"HTTPS://GITHUB.COM/ptone/scion.GIT", "github.com/ptone/scion"},
+			{"https://github.com/GoogleCloudPlatform/scion.git", "github.com/GoogleCloudPlatform/scion"},
+			{"http://github.com/GoogleCloudPlatform/scion.git", "github.com/GoogleCloudPlatform/scion"},
+			{"git@github.com:GoogleCloudPlatform/scion.git", "github.com/GoogleCloudPlatform/scion"},
+			{"github.com/GoogleCloudPlatform/scion.git", "github.com/GoogleCloudPlatform/scion"},
+			{"git@github.com:GoogleCloudPlatform/scion", "github.com/GoogleCloudPlatform/scion"},
+			{"HTTPS://github.com/GoogleCloudPlatform/scion.GIT", "github.com/GoogleCloudPlatform/scion"},
 			{"", ""},
 		}
 
@@ -321,10 +321,10 @@ func TestIsGitURL(t *testing.T) {
 		{"./relative/path", false},
 		{"../parent/path", false},
 		{"github.com", false},          // bare hostname, no scheme recognized
-		{"git@github.com:", false},      // no path after colon
-		{"git@github.com:repo", false},  // no '/' in path
-		{"https://github.com/", false},  // path is just '/'
-		{"https://github.com", false},   // no path
+		{"git@github.com:", false},     // no path after colon
+		{"git@github.com:repo", false}, // no '/' in path
+		{"https://github.com/", false}, // path is just '/'
+		{"https://github.com", false},  // no path
 	}
 
 	for _, tt := range tests {
@@ -372,8 +372,8 @@ func TestToHTTPSCloneURL(t *testing.T) {
 
 func TestExtractOrgRepo(t *testing.T) {
 	tests := []struct {
-		input   string
-		wantOrg string
+		input    string
+		wantOrg  string
 		wantRepo string
 	}{
 		{"https://github.com/acme/widgets.git", "acme", "widgets"},

@@ -424,18 +424,18 @@ This section demonstrates registering a local project as a grove and creating ag
 
 ### Test Setup
 
-For this test, we'll use an existing local project at `/Users/ptone/src/cli-projects/qa-scion`.
+For this test, we'll use an existing local project at `/Users/user/src/cli-projects/qa-scion`.
 
 ### Step 1: Verify the Project Has a .scion Directory
 
 ```bash
-ls -la /Users/ptone/src/cli-projects/qa-scion/.scion
+ls -la /Users/user/src/cli-projects/qa-scion/.scion
 ```
 
 If it doesn't exist, you can initialize it:
 
 ```bash
-cd /Users/ptone/src/cli-projects/qa-scion && scion init
+cd /Users/user/src/cli-projects/qa-scion && scion init
 ```
 
 ### Step 2: Register the Project Grove with Local Path
@@ -450,7 +450,7 @@ PROJECT_RESPONSE=$(curl -s -X POST http://localhost:9810/api/v1/groves/register 
   -d '{
     "name": "QA Scion",
     "gitRemote": "https://github.com/example/qa-scion",
-    "path": "/Users/ptone/src/cli-projects/qa-scion/.scion",
+    "path": "/Users/user/src/cli-projects/qa-scion/.scion",
     "broker": {
       "id": "'$BROKER_ID'",
       "name": "Local Mac",
@@ -496,7 +496,7 @@ Expected response (note the `localPath` field included for each broker):
           "available": true
         }
       ],
-      "localPath": "/Users/ptone/src/cli-projects/qa-scion/.scion",
+      "localPath": "/Users/user/src/cli-projects/qa-scion/.scion",
       "created": "2026-01-25T11:22:02.903695-08:00",
       "updated": "2026-01-25T11:29:46.819009-08:00"
     }
@@ -527,7 +527,7 @@ The agent should now be running with the project's workspace mounted. Check the 
 curl -s http://localhost:9800/api/v1/agents/project-agent | jq
 ```
 
-The agent's container will have `/Users/ptone/src/cli-projects/qa-scion` as its workspace source, properly mounted at `/workspace` inside the container.
+The agent's container will have `/Users/user/src/cli-projects/qa-scion` as its workspace source, properly mounted at `/workspace` inside the container.
 
 ### Step 6: Clean Up
 

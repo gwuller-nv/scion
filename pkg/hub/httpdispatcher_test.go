@@ -48,30 +48,30 @@ func createTestStore(t *testing.T) store.Store {
 
 // mockRuntimeBrokerClient is a mock implementation of RuntimeBrokerClient for testing.
 type mockRuntimeBrokerClient struct {
-	createCalled    bool
-	startCalled     bool
-	stopCalled      bool
-	restartCalled   bool
-	deleteCalled    bool
-	messageCalled   bool
-	cleanupCalled   bool
-	lastBrokerID    string
-	lastEndpoint    string
-	lastAgentID     string
-	lastTask        string
-	lastGrovePath   string
-	lastGroveSlug   string
-	lastMessage     string
-	lastInterrupt   bool
+	createCalled     bool
+	startCalled      bool
+	stopCalled       bool
+	restartCalled    bool
+	deleteCalled     bool
+	messageCalled    bool
+	cleanupCalled    bool
+	lastBrokerID     string
+	lastEndpoint     string
+	lastAgentID      string
+	lastTask         string
+	lastGrovePath    string
+	lastGroveSlug    string
+	lastMessage      string
+	lastInterrupt    bool
 	lastResolvedEnv  map[string]string
 	lastInlineConfig *api.ScionConfig
-	lastCreateReq   *RemoteCreateAgentRequest
-	lastDeleteOpts  struct{ deleteFiles, removeBranch bool }
-	returnErr       error
-	cleanupErr      error
-	startReturnResp *RemoteAgentResponse // custom start response if set
-	cleanupCalls    int
-	cleanupSlugs    []string
+	lastCreateReq    *RemoteCreateAgentRequest
+	lastDeleteOpts   struct{ deleteFiles, removeBranch bool }
+	returnErr        error
+	cleanupErr       error
+	startReturnResp  *RemoteAgentResponse // custom start response if set
+	cleanupCalls     int
+	cleanupSlugs     []string
 }
 
 func (m *mockRuntimeBrokerClient) CreateAgent(ctx context.Context, brokerID, brokerEndpoint string, req *RemoteCreateAgentRequest) (*RemoteAgentResponse, error) {
@@ -2070,7 +2070,7 @@ func TestHTTPAgentDispatcher_DispatchAgentCreate_LinkedGroveNoGitRemote(t *testi
 		GroveID:    "grove-linked-no-git",
 		BrokerID:   "broker-1",
 		BrokerName: "test-broker",
-		LocalPath:  "/Users/ptone/dev/projects/my-project/.scion",
+		LocalPath:  "/Users/user/dev/projects/my-project/.scion",
 		Status:     store.BrokerStatusOnline,
 	}
 	if err := memStore.AddGroveProvider(ctx, provider); err != nil {
@@ -2107,8 +2107,8 @@ func TestHTTPAgentDispatcher_DispatchAgentCreate_LinkedGroveNoGitRemote(t *testi
 	}
 
 	// The GrovePath should be set from the provider
-	if mockClient.lastCreateReq.GrovePath != "/Users/ptone/dev/projects/my-project/.scion" {
-		t.Errorf("expected GrovePath '/Users/ptone/dev/projects/my-project/.scion', got '%s'", mockClient.lastCreateReq.GrovePath)
+	if mockClient.lastCreateReq.GrovePath != "/Users/user/dev/projects/my-project/.scion" {
+		t.Errorf("expected GrovePath '/Users/user/dev/projects/my-project/.scion', got '%s'", mockClient.lastCreateReq.GrovePath)
 	}
 
 	// Config.Workspace should be cleared when a local provider path exists
