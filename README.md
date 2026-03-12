@@ -14,27 +14,27 @@ Scion takes a "less is more" approach to allowing modern powerful models to dete
 - **Isolation**: Each agent runs in its own container with strict separation of credentials, configuration, and environment. Scion uses `git worktree` to provide each agent with a dedicated workspace, preventing merge conflicts and ensuring clean separation of concerns.
 - **Context Management**: Each agent has a dedicated context window, and optionally its own system instruction.
 - **Runtimes**: Manage multiple execution environments (e.g., Local, Docker, Kubernetes) via named profiles. Distributed across local workstion, remote VMs, and container clusters.
-- **Specialization**: Agents can be customized via [Templates](docs-site/src/content/docs/guides/templates.md) (e.g., "Security Auditor", "QA Tester") to perform specific roles.
+- **Specialization**: Agents can be customized via [Templates](docs-site/src/content/docs/advanced-local/templates.md) (e.g., "Security Auditor", "QA Tester") to perform specific roles.
 - **Interactivity**: Agents run in `tmux` sessions by default, allowing for "detached" background operation, enqueuing messages to running agents, and "attaching" for human-in-the-loop interaction. Attach to running agents across automatically established network tunnels for secure remote control.
 - **Harness Agnostic**: Works with Gemini CLI, Claude Code, OpenCode, and Codex. Easily adaptable to any harness which can run in a container.
 - **Observability**: Supports normalized OTEL telemetry across harnesses for logging and metrics allowing easy aggregation across agent swarms.
 
 ## Documentation
 
-Visit our **[Documentation Site](docs-site/)** for comprehensive guides and reference.
+Visit our **[Documentation Site](docs-site/src/content/docs/)** for comprehensive guides and reference.
 
 - **[Overview](docs-site/src/content/docs/overview.md)**: Introduction to Scion.
-- **[Installation](docs-site/src/content/docs/install.md)**: How to get Scion up and running.
+- **[Installation](docs-site/src/content/docs/getting-started/install.md)**: How to get Scion up and running.
 - **[Concepts](docs-site/src/content/docs/concepts.md)**: Understanding Agents, Groves, Harnesses, and Runtimes.
 - **[CLI Reference](docs-site/src/content/docs/reference/cli.md)**: Comprehensive guide to all Scion commands.
 - **Guides**:
-    - [Using Templates](docs-site/src/content/docs/guides/templates.md)
-    - [Using Tmux](docs-site/src/content/docs/guides/tmux.md)
-    - [Kubernetes Runtime](docs-site/src/content/docs/guides/kubernetes.md)
+    - [Using Templates](docs-site/src/content/docs/advanced-local/templates.md)
+    - [Using Tmux](docs-site/src/content/docs/advanced-local/tmux.md)
+    - [Kubernetes Runtime](docs-site/src/content/docs/hub-admin/kubernetes.md)
 
 ## Installation
 
-See the **[Installation Guide](docs-site/src/content/docs/install.md)** for detailed instructions.
+See the **[Installation Guide](docs-site/src/content/docs/getting-started/install.md)** for detailed instructions.
 
 Quick start from source:
 ```bash
@@ -90,7 +90,7 @@ Scion settings are managed in `settings.json` files, following a precedence orde
 
 Profiles allow you to switch runtimes and configurations easily (e.g. `scion --profile remote start ...`).
 
-Templates serve as blueprints and can be managed via the `templates` subcommand. See the [Templates Guide](docs-site/src/content/docs/guides/templates.md) for more details.
+Templates serve as blueprints and can be managed via the `templates` subcommand. See the [Templates Guide](docs-site/src/content/docs/advanced-local/templates.md) for more details.
 
 ## Disclaimers
 
