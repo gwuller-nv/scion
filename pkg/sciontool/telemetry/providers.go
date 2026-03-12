@@ -69,6 +69,21 @@ func buildResource(ctx context.Context) (*resource.Resource, error) {
 			attribute.String("scion.grove.id", groveID),
 		))
 	}
+	if harness := os.Getenv("SCION_HARNESS"); harness != "" {
+		attrs = append(attrs, resource.WithAttributes(
+			attribute.String("scion.harness", harness),
+		))
+	}
+	if model := os.Getenv("SCION_MODEL"); model != "" {
+		attrs = append(attrs, resource.WithAttributes(
+			attribute.String("scion.model", model),
+		))
+	}
+	if broker := os.Getenv("SCION_BROKER_NAME"); broker != "" {
+		attrs = append(attrs, resource.WithAttributes(
+			attribute.String("scion.broker", broker),
+		))
+	}
 	res, err := resource.New(ctx, attrs...)
 	if err != nil {
 		return nil, fmt.Errorf("creating resource: %w", err)

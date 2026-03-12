@@ -350,6 +350,15 @@ func (h *TelemetryHandler) emitLogRecord(ctx context.Context, event *hooks.Event
 	if event.Data.Error != "" {
 		attrs = append(attrs, slog.String("error", event.Data.Error))
 	}
+	if event.Data.InputTokens > 0 {
+		attrs = append(attrs, slog.Int64("gen_ai.usage.input_tokens", event.Data.InputTokens))
+	}
+	if event.Data.OutputTokens > 0 {
+		attrs = append(attrs, slog.Int64("gen_ai.usage.output_tokens", event.Data.OutputTokens))
+	}
+	if event.Data.CachedTokens > 0 {
+		attrs = append(attrs, slog.Int64("gen_ai.usage.cached_tokens", event.Data.CachedTokens))
+	}
 
 	h.logger.LogAttrs(ctx, slog.LevelInfo, spanName, attrs...)
 }
@@ -464,6 +473,9 @@ func (h *TelemetryHandler) metricAttrs() []attribute.KeyValue {
 	}
 	if v := os.Getenv("SCION_HARNESS"); v != "" {
 		attrs = append(attrs, attribute.String("harness", v))
+	}
+	if v := os.Getenv("SCION_GROVE_ID"); v != "" {
+		attrs = append(attrs, attribute.String("grove_id", v))
 	}
 	return attrs
 }

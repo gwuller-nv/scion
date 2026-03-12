@@ -346,6 +346,52 @@ func TestTelemetryHandler_LogRedaction(t *testing.T) {
 	}
 }
 
+func TestTelemetryHandler_LogRecordIncludesTokens(t *testing.T) {
+	proc := &recordingProcessor{}
+	lp := sdklog.NewLoggerProvider(sdklog.WithProcessor(proc))
+	defer lp.Shutdown(context.Background())
+
+	h := NewTelemetryHandler(nil, lp, nil)
+
+	event := &hooks.Event{
+		Name:    hooks.EventSessionEnd,
+		Dialect: "claude",
+		Data: hooks.EventData{
+			Reason:       "user_exit",
+			InputTokens:  3000,
+			OutputTokens: 1200,
+			CachedTokens: 500,
+		},
+	}
+	if err := h.Handle(event); err != nil {
+		t.Fatalf("Handle error: %v", err)
+	}
+
+	records := proc.Records()
+	if len(records) != 1 {
+		t.Fatalf("expected 1 log record, got %d", len(records))
+	}
+
+	found := map[string]int64{}
+	rec := &records[0]
+	rec.WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Value.Kind() == otellog.KindInt64 {
+			found[kv.Key] = kv.Value.AsInt64()
+		}
+		return true
+	})
+
+	if found["gen_ai.usage.input_tokens"] != 3000 {
+		t.Errorf("gen_ai.usage.input_tokens = %d, want 3000", found["gen_ai.usage.input_tokens"])
+	}
+	if found["gen_ai.usage.output_tokens"] != 1200 {
+		t.Errorf("gen_ai.usage.output_tokens = %d, want 1200", found["gen_ai.usage.output_tokens"])
+	}
+	if found["gen_ai.usage.cached_tokens"] != 500 {
+		t.Errorf("gen_ai.usage.cached_tokens = %d, want 500", found["gen_ai.usage.cached_tokens"])
+	}
+}
+
 func TestNewTelemetryHandler_WithMeterProvider(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
