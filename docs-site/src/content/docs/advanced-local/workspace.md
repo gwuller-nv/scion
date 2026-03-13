@@ -128,6 +128,42 @@ Authentication is handled via the `GITHUB_TOKEN` environment variable, which is 
 
 ---
 
+## 5. Grove Shared Directories
+
+Grove Shared Directories provide a persistent, mutable storage layer that can be shared between multiple agents within a single grove. This is ideal for sharing build artifacts, shared caches, or state files without relying on version control or the Hub database.
+
+### Managing Shared Directories
+
+You can manage shared directories using the `scion shared-dir` CLI commands:
+
+```bash
+# Create a new shared directory
+scion shared-dir create <name>
+
+# List shared directories in the current grove
+scion shared-dir list
+
+# View details about a specific shared directory
+scion shared-dir info <name>
+
+# Remove a shared directory (permanently deletes contents)
+scion shared-dir remove <name>
+```
+
+### Mounting Shared Directories
+
+When an agent is created in a grove that has shared directories, they are automatically mounted into the agent's container. 
+
+By default, they are available at two locations within the agent:
+- **Standard Path:** `/scion-volumes/<name>`
+- **Workspace Path:** `/workspace/.scion-volumes/<name>`
+
+### Storage Backends
+- **Local Workstations:** Backed by directories on the host filesystem.
+- **Kubernetes:** Backed by PersistentVolumeClaims (PVCs) with grove-scoped lifecycle management, ensuring data persists across pod restarts and can be accessed by any agent in the grove.
+
+---
+
 ## The `cdw` Command
 
 Scion provides a helper command, `cdw` (Change Directory to Worktree), to quickly navigate to an agent's workspace on your host.

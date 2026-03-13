@@ -30,6 +30,7 @@ Starts a new agent or resumes an existing one.
     - `<agent-name>`: Unique name for the agent instance.
     - `[task]`: (Optional) The initial instruction/task for the agent.
 - **Flags:**
+    - `-b, --branch <string>`: Target branch for the agent workspace.
     - `-t, --type <string>`: Template to use (default "gemini").
     - `-i, --image <string>`: Override container image.
     - `-a, --attach`: Attach to the agent immediately after starting.
@@ -159,6 +160,15 @@ View and modify configuration settings.
 Change directory to the workspace of an agent.
 
 **Usage:** `scion cdw <agent-name>`
+
+### `scion shared-dir`
+
+Manages shared directories for agents within a grove.
+
+- `list`: List shared directories in the current grove.
+- `create <name>`: Create a new shared directory.
+- `info <name>`: View details about a specific shared directory.
+- `remove <name>`: Remove a shared directory (permanently deletes contents).
 
 ## Template Management
 

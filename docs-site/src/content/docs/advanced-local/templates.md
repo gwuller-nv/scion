@@ -55,6 +55,10 @@ Scion determines which harness-config to use in this order:
 
 Local agent templates are automatically bootstrapped into the Hub database during server startup. This ensures that all defined templates are consistently available across the system, allowing for seamless deployment without manual importing steps.
 
+### Template Traceability
+
+To provide clear visibility into the exact configuration version associated with each agent, Scion captures and displays template IDs and hashes. When you view an agent's details in the CLI (`scion list`, `scion info`) or the Web UI, you can see the precise template version that was used to provision it.
+
 ### Structure of a Template
 A typical template directory looks like this:
 

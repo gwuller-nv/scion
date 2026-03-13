@@ -144,7 +144,18 @@ Ensure the environment where the agent container runs (GKE Pod, Cloud Run, etc.)
 
 ## Native Metrics Pipeline
 
-Scion includes a native OTel metrics pipeline that captures operational data from agent sessions. This data is recorded as counters and histograms, providing a time-series view of agent performance.
+Scion includes a native OTel metrics pipeline that captures operational data from agent sessions. This data is recorded as counters and histograms, providing a time-series view of agent performance. 
+
+To enable harness-aware telemetry, Scion automatically injects `SCION_HARNESS` and `SCION_MODEL` environment variables into all agent containers.
+
+### Enriched Resource Attributes
+
+All metrics and traces emitted by Scion are enriched with context-aware OpenTelemetry resource attributes to allow for precise filtering and aggregation in your cloud backend:
+
+- `scion.harness`: The type of harness running the agent (e.g., `gemini`, `claude`, `codex`).
+- `scion.model`: The specific LLM model being used.
+- `scion.broker`: The ID of the Runtime Broker executing the agent.
+- `grove_id`: The ID of the agent's parent grove.
 
 ### Automated Metrics Collection
 
@@ -160,6 +171,8 @@ When harness events occur (via hooks), sciontool automatically records the follo
 | `agent.session.count` | Counter | sessions | Total number of agent sessions |
 | `gen_ai.api.calls` | Counter | calls | Total number of LLM API requests |
 | `gen_ai.api.duration` | Histogram | ms | Latency of LLM API requests |
+
+*(Note: The Codex harness has been expanded to capture comprehensive telemetry including tool usage, detailed tool input/output, and granular token counts for input, output, and cached tokens).*
 
 ### Correlated Logs
 
