@@ -169,7 +169,7 @@ The codebase currently uses "broker" in several identifiers where the meaning is
 
 ## Implementation Phases (Message Broker-Specific)
 
-### Phase 2: Reference Message Broker Plugin (depends on Phase 1 plugin infrastructure)
+### Phase 2: Reference Message Broker Plugin (depends on Phase 1 plugin infrastructure) ✓ COMPLETE
 
 A minimal reference message broker plugin that validates the plugin interface end-to-end and serves as both a development tool and integration test fixture.
 
@@ -196,9 +196,8 @@ A minimal reference message broker plugin that validates the plugin interface en
 
 **Deliverables:**
 - `cmd/scion-broker-repl/` — standalone REPL binary (also usable as a plugin)
-- `pkg/plugins/refbroker/` — reference message broker plugin implementation
-- Integration tests exercising: plugin discovery, Configure, Publish, Subscribe, inbound delivery via hub API, Unsubscribe, Close
-- Example plugin manifest for the reference message broker
+- `pkg/plugin/refbroker/` — reference message broker plugin implementation
+- Integration tests exercising: Configure, Publish, Subscribe, inbound delivery via hub API, echo filtering, Unsubscribe, Close, GetInfo, full lifecycle
 
 ### Phase 3: NATS Message Broker Plugin (first external implementation)
 - NATS message broker plugin (first production-grade external implementation)

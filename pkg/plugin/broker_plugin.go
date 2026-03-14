@@ -132,6 +132,12 @@ type BrokerRPCClient struct {
 	client *rpc.Client
 }
 
+// NewBrokerRPCClient creates a BrokerRPCClient wrapping the given RPC client.
+// This is primarily used by integration tests that set up their own RPC server.
+func NewBrokerRPCClient(client *rpc.Client) *BrokerRPCClient {
+	return &BrokerRPCClient{client: client}
+}
+
 func (c *BrokerRPCClient) Configure(config map[string]string) error {
 	return c.client.Call("Plugin.Configure", &ConfigureArgs{Config: config}, &struct{}{})
 }
