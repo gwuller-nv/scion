@@ -862,3 +862,63 @@ func TestDeleteHubConnection(t *testing.T) {
 		t.Errorf("expected hub_connections to be cleaned up, got %s", string(content))
 	}
 }
+
+func TestUpdateSetting_SplitStorageWritesToExternalDir(t *testing.T) {
+	// When a grove has split storage (grove-id file), UpdateSetting should
+	// write to the external config dir (~/.scion/grove-configs/…), not the
+	// local .scion/ directory, so that LoadSettingsKoanf reads the same values.
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	// Create a project with .scion and a grove-id file (split storage marker)
+	projectDir := filepath.Join(tmpHome, "my-project")
+	scionDir := filepath.Join(projectDir, ".scion")
+	if err := os.MkdirAll(scionDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	groveID := "abcd1234-5678-9abc-def0-123456789abc"
+	if err := WriteGroveID(scionDir, groveID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Compute expected external config dir
+	groveSlug := api.Slugify("my-project")
+	shortUUID := strings.ReplaceAll(groveID, "-", "")[:8]
+	externalDir := filepath.Join(tmpHome, ".scion", "grove-configs",
+		groveSlug+"__"+shortUUID, ".scion")
+	if err := os.MkdirAll(externalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a setting via UpdateSetting
+	if err := UpdateSetting(scionDir, "hub.enabled", "true", false); err != nil {
+		t.Fatalf("UpdateSetting failed: %v", err)
+	}
+
+	// Verify the setting was written to the EXTERNAL config dir
+	extContent, err := os.ReadFile(filepath.Join(externalDir, "settings.yaml"))
+	if err != nil {
+		t.Fatalf("expected settings.yaml in external dir %s, got error: %v", externalDir, err)
+	}
+	if !strings.Contains(string(extContent), "enabled: true") {
+		t.Errorf("expected external settings.yaml to contain 'enabled: true', got:\n%s", extContent)
+	}
+
+	// Verify the local .scion/ did NOT get a settings.yaml written
+	localPath := filepath.Join(scionDir, "settings.yaml")
+	if _, err := os.Stat(localPath); err == nil {
+		t.Errorf("expected no settings.yaml in local .scion/ dir, but file exists")
+	}
+
+	// Verify LoadSettingsKoanf reads the value correctly
+	settings, err := LoadSettingsKoanf(scionDir)
+	if err != nil {
+		t.Fatalf("LoadSettingsKoanf failed: %v", err)
+	}
+	if !settings.IsHubEnabled() {
+		t.Errorf("expected hub.enabled=true from effective settings, got false")
+	}
+}
