@@ -887,17 +887,17 @@ This is comparable to installing any third-party GitHub App (CI systems, code re
 
 ## 16. Implementation Phases
 
-### Phase 1: Hub-Level App Configuration and Token Minting
+### Phase 1: Hub-Level App Configuration and Token Minting ✅ COMPLETE
 
-1. Add `GitHubAppConfig` to Hub server configuration (including `api_base_url`, `webhook_secret`).
-2. Register all fields in Hub settings schema.
-3. Implement JWT generation from private key (`pkg/hub/githubapp/`).
-4. Implement installation token minting via GitHub API.
-5. Add Hub API: `GET /api/v1/github-app`, `PUT /api/v1/github-app`.
-6. Add `GitHubInstallation` model and store operations.
-7. Add Hub API: `GET/POST /api/v1/github-app/installations`.
-8. Add `GitHubAppGroveStatus` model and store operations.
-9. Unit tests for JWT generation and token exchange.
+1. ✅ Add `GitHubAppConfig` to Hub server configuration (including `api_base_url`, `webhook_secret`).
+2. ✅ Register all fields in Hub settings schema (`V1GitHubAppConfig` in `settings_v1.go`, conversion functions).
+3. ✅ Implement JWT generation from private key (`pkg/hub/githubapp/`).
+4. ✅ Implement installation token minting via GitHub API.
+5. ✅ Add Hub API: `GET /api/v1/github-app`, `PUT /api/v1/github-app`.
+6. ✅ Add `GitHubInstallation` model and store operations (SQLite migration V35).
+7. ✅ Add Hub API: `GET/POST /api/v1/github-app/installations`, plus `GET/PUT/DELETE` by ID.
+8. ✅ Add `GitHubAppGroveStatus` model and store operations (grove fields + grove sub-route endpoints).
+9. ✅ Unit tests for JWT generation, token exchange, error classification, store CRUD, and API handlers.
 
 ### Phase 2: Installation Callback, Grove Association, and Secret Resolution
 
