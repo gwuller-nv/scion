@@ -233,11 +233,50 @@ fi
 FULL_REMOTE_COMMANDS=""
 if $FULL_DEPLOY; then
     FULL_REMOTE_COMMANDS='
-    # Ensure build dependencies are present (cloud-init may not have finished)
-    if ! command -v make &>/dev/null; then
-        echo "  -> Installing build dependencies..."
+    # Ensure all build/runtime dependencies are present (cloud-init may have failed or not finished)
+    NEED_APT_UPDATE=false
+    for cmd in make curl git node; do
+        if ! command -v "$cmd" &>/dev/null; then
+            NEED_APT_UPDATE=true
+            break
+        fi
+    done
+    if $NEED_APT_UPDATE; then
+        echo "  -> Installing missing dependencies..."
         sudo apt-get update
+    fi
+    if ! command -v make &>/dev/null; then
         sudo apt-get install -y make build-essential
+    fi
+    if ! command -v node &>/dev/null; then
+        echo "  -> Installing Node.js..."
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
+        sudo apt-get install -y nodejs
+    fi
+    if [ ! -d /usr/local/go ]; then
+        echo "  -> Installing Go..."
+        curl -L https://go.dev/dl/go1.23.0.linux-amd64.tar.gz -o /tmp/go.tar.gz
+        sudo tar -C /usr/local -xzf /tmp/go.tar.gz
+        sudo ln -sf /usr/local/go/bin/go /usr/bin/go
+        sudo ln -sf /usr/local/go/bin/gofmt /usr/bin/gofmt
+    fi
+    if ! command -v docker &>/dev/null; then
+        echo "  -> Installing Docker..."
+        sudo mkdir -p /etc/apt/keyrings
+        if [ ! -f /etc/apt/keyrings/docker.gpg ]; then
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        fi
+        if [ ! -f /etc/apt/sources.list.d/docker.list ]; then
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        fi
+        sudo apt-get update
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+        sudo systemctl enable docker
+        sudo systemctl start docker
+        # Add scion user to docker group
+        if id scion &>/dev/null; then
+            sudo usermod -aG docker scion
+        fi
     fi
 
     # Install Caddy if missing
