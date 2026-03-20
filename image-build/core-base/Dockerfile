@@ -16,6 +16,9 @@
 # Core Base Image - Foundation tools only (Go, Git, unix tools, GCS fuse)
 # No scion-specific tooling or user setup
 
+# Bun runtime source
+FROM oven/bun:latest AS bun-source
+
 FROM node:20-slim AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -132,6 +135,9 @@ COPY --from=builder /usr/local/go /usr/local/go
 COPY --from=builder /usr/local/bin/git /usr/local/bin/git
 COPY --from=builder /usr/local/libexec/git-core /usr/local/libexec/git-core
 COPY --from=builder /usr/local/share/git-core /usr/local/share/git-core
+
+# Copy Bun from bun-source
+COPY --from=bun-source /usr/local/bin/bun /usr/local/bin/bun
 
 # Install gcloud CLI
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
