@@ -69,6 +69,9 @@ export class ScionPageTerminal extends LitElement {
   private agentName = '';
 
   @state()
+  private groveId = '';
+
+  @state()
   private loading = true;
 
   @state()
@@ -312,6 +315,7 @@ export class ScionPageTerminal extends LitElement {
 
       const agent = (await response.json()) as Agent;
       this.agentName = agent.name;
+      this.groveId = agent.groveId ?? '';
 
       if (!isTerminalAvailable(agent)) {
         this.error = agent.activity === 'offline'
@@ -642,6 +646,7 @@ export class ScionPageTerminal extends LitElement {
     if (this.loading) {
       return html`
         <div class="toolbar">
+          ${this.groveId ? html`<a href="/groves/${this.groveId}" class="back-link">&larr; Back to Grove</a>` : ''}
           <a href="/agents/${this.agentId}" class="back-link">
             &larr; Back to Agent
           </a>
@@ -656,6 +661,7 @@ export class ScionPageTerminal extends LitElement {
     if (this.error && !this.terminal) {
       return html`
         <div class="toolbar">
+          ${this.groveId ? html`<a href="/groves/${this.groveId}" class="back-link">&larr; Back to Grove</a>` : ''}
           <a href="/agents/${this.agentId}" class="back-link">
             &larr; Back to Agent
           </a>
@@ -676,12 +682,12 @@ export class ScionPageTerminal extends LitElement {
 
     return html`
       <div class="toolbar">
+        ${this.groveId ? html`<a href="/groves/${this.groveId}" class="back-link">&larr; Back to Grove</a>` : ''}
         <a href="/agents/${this.agentId}" class="back-link">
           &larr; Back to Agent
         </a>
         <div class="separator"></div>
         <span class="agent-name">${this.agentName || this.agentId}</span>
-        <div class="spacer"></div>
         <div class="toggle-group" title="Mouse mode: terminal mouse events&#10;Clipboard mode: browser text selection">
           <button
             class=${this.mouseEnabled ? 'active' : ''}
@@ -710,6 +716,7 @@ export class ScionPageTerminal extends LitElement {
             ?disabled=${!this.connected}
           >${this.renderTerminalIcon()}</button>
         </div>
+        <div class="spacer"></div>
         <div class="status-indicator">
           <span class="status-dot ${this.connected ? 'connected' : ''}"></span>
           ${this.connected ? 'Connected' : 'Disconnected'}
