@@ -83,27 +83,21 @@ export class ScionPageGroveDetail extends LitElement {
   private agentScopeCapabilities: Capabilities | undefined;
 
   /**
-   * Workspace files for hub-native groves
+   * Active file tab key ('workspace' or shared dir name)
    */
   @state()
-  private workspaceFiles: Array<{
-    path: string;
-    size: number;
-    modTime: string;
-    mode: string;
-  }> = [];
+  private activeFileTab = 'workspace';
 
   /**
-   * Workspace loading state
+   * Per-tab file data keyed by tab name
    */
   @state()
-  private workspaceLoading = false;
-
-  /**
-   * Total size of workspace files
-   */
-  @state()
-  private workspaceTotalSize = 0;
+  private fileTabData: Record<string, {
+    files: Array<{ path: string; size: number; modTime: string; mode: string }>;
+    loading: boolean;
+    totalSize: number;
+    error: string | null;
+  }> = {};
 
   /**
    * Upload in progress
@@ -122,12 +116,6 @@ export class ScionPageGroveDetail extends LitElement {
    */
   @state()
   private viewMode: ViewMode = 'grid';
-
-  /**
-   * Workspace error
-   */
-  @state()
-  private workspaceError: string | null = null;
 
   static override styles = css`
     :host {
@@ -618,6 +606,27 @@ export class ScionPageGroveDetail extends LitElement {
       margin-bottom: 1rem;
     }
 
+    .files-tab-group {
+      margin-bottom: 0;
+    }
+
+    .files-tab-group::part(base) {
+      border-bottom: 1px solid var(--scion-border, #e2e8f0);
+    }
+
+    .files-tab-group::part(body) {
+      padding: 0;
+    }
+
+    .tab-label-truncated {
+      max-width: 10rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+      vertical-align: bottom;
+    }
+
     @media (max-width: 768px) {
       .hide-mobile {
         display: none;
@@ -734,9 +743,14 @@ export class ScionPageGroveDetail extends LitElement {
         stateManager.seedGroves([this.grove]);
       }
 
-      // Load workspace files for hub-native groves
+      // Load files for the active tab
       if (this.grove && !this.grove.gitRemote) {
-        void this.loadWorkspaceFiles();
+        void this.loadTabFiles('workspace');
+      }
+      // For git-based groves with shared dirs, load the first shared dir
+      if (this.grove && this.grove.gitRemote && this.grove.sharedDirs?.length) {
+        this.activeFileTab = this.grove.sharedDirs[0].name;
+        void this.loadTabFiles(this.grove.sharedDirs[0].name);
       }
 
       // Auto-discover GitHub App installation if grove has a GitHub remote but no installation
@@ -828,12 +842,25 @@ export class ScionPageGroveDetail extends LitElement {
     }
   }
 
-  private async loadWorkspaceFiles(): Promise<void> {
-    this.workspaceLoading = true;
-    this.workspaceError = null;
+  private getTabApiPath(tabName: string): string {
+    if (tabName === 'workspace') {
+      return `/api/v1/groves/${this.groveId}/workspace/files`;
+    }
+    return `/api/v1/groves/${this.groveId}/shared-dirs/${encodeURIComponent(tabName)}/files`;
+  }
+
+  private getTabData(tabName: string) {
+    return this.fileTabData[tabName] || { files: [], loading: false, totalSize: 0, error: null };
+  }
+
+  private async loadTabFiles(tabName: string): Promise<void> {
+    this.fileTabData = {
+      ...this.fileTabData,
+      [tabName]: { ...this.getTabData(tabName), loading: true, error: null },
+    };
 
     try {
-      const response = await apiFetch(`/api/v1/groves/${this.groveId}/workspace/files`);
+      const response = await apiFetch(this.getTabApiPath(tabName));
 
       if (!response.ok) {
         throw new Error(await extractApiError(response, `HTTP ${response.status}`));
@@ -845,18 +872,30 @@ export class ScionPageGroveDetail extends LitElement {
         totalCount: number;
       };
 
-      this.workspaceFiles = data.files || [];
-      this.workspaceTotalSize = data.totalSize || 0;
+      this.fileTabData = {
+        ...this.fileTabData,
+        [tabName]: {
+          files: data.files || [],
+          loading: false,
+          totalSize: data.totalSize || 0,
+          error: null,
+        },
+      };
     } catch (err) {
-      console.error('Failed to load workspace files:', err);
-      this.workspaceError = err instanceof Error ? err.message : 'Failed to load files';
-    } finally {
-      this.workspaceLoading = false;
+      console.error(`Failed to load files for tab ${tabName}:`, err);
+      this.fileTabData = {
+        ...this.fileTabData,
+        [tabName]: {
+          ...this.getTabData(tabName),
+          loading: false,
+          error: err instanceof Error ? err.message : 'Failed to load files',
+        },
+      };
     }
   }
 
   private handleUploadClick(): void {
-    const input = this.shadowRoot?.querySelector('#workspace-file-input') as HTMLInputElement;
+    const input = this.shadowRoot?.querySelector('#file-tab-input') as HTMLInputElement;
     if (input) {
       input.click();
     }
@@ -867,8 +906,8 @@ export class ScionPageGroveDetail extends LitElement {
     const fileList = input.files;
     if (!fileList || fileList.length === 0) return;
 
+    const tab = this.activeFileTab;
     this.uploadProgress = true;
-    this.workspaceError = null;
 
     try {
       const formData = new FormData();
@@ -877,7 +916,7 @@ export class ScionPageGroveDetail extends LitElement {
         formData.append(file.name, file);
       }
 
-      const response = await apiFetch(`/api/v1/groves/${this.groveId}/workspace/files`, {
+      const response = await apiFetch(this.getTabApiPath(tab), {
         method: 'POST',
         body: formData,
       });
@@ -886,14 +925,15 @@ export class ScionPageGroveDetail extends LitElement {
         throw new Error(await extractApiError(response, `Upload failed: HTTP ${response.status}`));
       }
 
-      // Reload file list (non-blocking for workspace operations)
-      void this.loadWorkspaceFiles();
+      void this.loadTabFiles(tab);
     } catch (err) {
       console.error('Failed to upload files:', err);
-      this.workspaceError = err instanceof Error ? err.message : 'Upload failed';
+      this.fileTabData = {
+        ...this.fileTabData,
+        [tab]: { ...this.getTabData(tab), error: err instanceof Error ? err.message : 'Upload failed' },
+      };
     } finally {
       this.uploadProgress = false;
-      // Reset the input so the same files can be re-selected
       input.value = '';
     }
   }
@@ -901,30 +941,32 @@ export class ScionPageGroveDetail extends LitElement {
   private async handleFileDelete(filePath: string, event?: MouseEvent): Promise<void> {
     if (!event?.altKey && !confirm(`Delete ${filePath}?`)) return;
 
+    const tab = this.activeFileTab;
     try {
-      // Encode each path segment individually (preserve /)
       const encodedPath = filePath
         .split('/')
         .map((seg) => encodeURIComponent(seg))
         .join('/');
 
-      const response = await apiFetch(
-        `/api/v1/groves/${this.groveId}/workspace/files/${encodedPath}`,
-        {
-          method: 'DELETE',
-        }
-      );
+      const apiBase = this.getTabApiPath(tab);
+      const response = await apiFetch(`${apiBase}/${encodedPath}`, { method: 'DELETE' });
 
       if (!response.ok && response.status !== 204) {
         throw new Error(await extractApiError(response, `Delete failed: HTTP ${response.status}`));
       }
 
-      // Remove file from local list immediately, then refresh in background
-      this.workspaceFiles = this.workspaceFiles.filter(f => f.path !== filePath);
-      void this.loadWorkspaceFiles();
+      const tabData = this.getTabData(tab);
+      this.fileTabData = {
+        ...this.fileTabData,
+        [tab]: { ...tabData, files: tabData.files.filter(f => f.path !== filePath) },
+      };
+      void this.loadTabFiles(tab);
     } catch (err) {
       console.error('Failed to delete file:', err);
-      this.workspaceError = err instanceof Error ? err.message : 'Delete failed';
+      this.fileTabData = {
+        ...this.fileTabData,
+        [tab]: { ...this.getTabData(tab), error: err instanceof Error ? err.message : 'Delete failed' },
+      };
     }
   }
 
@@ -962,13 +1004,14 @@ export class ScionPageGroveDetail extends LitElement {
 
   private handleFilePreview(filePath: string): void {
     const encodedPath = this.encodeFilePath(filePath);
-    window.open(`/api/v1/groves/${this.groveId}/workspace/files/${encodedPath}?view=true`, '_blank');
+    const base = this.getTabApiPath(this.activeFileTab);
+    window.open(`${base}/${encodedPath}?view=true`, '_blank');
   }
 
   private handleFileDownload(filePath: string): void {
     const encodedPath = this.encodeFilePath(filePath);
-    // Open the download URL in a new context to trigger browser download
-    window.open(`/api/v1/groves/${this.groveId}/workspace/files/${encodedPath}`, '_blank');
+    const base = this.getTabApiPath(this.activeFileTab);
+    window.open(`${base}/${encodedPath}`, '_blank');
   }
 
   private handleDownloadArchive(): void {
@@ -1190,25 +1233,66 @@ export class ScionPageGroveDetail extends LitElement {
         ? this.renderEmptyAgents()
         : this.viewMode === 'grid' ? this.renderAgentGrid() : this.renderAgentTable()}
 
-      ${!this.grove.gitRemote ? this.renderWorkspaceFiles() : ''}
+      ${this.shouldShowFilesSection() ? this.renderFilesSection() : ''}
     `;
   }
 
-  private renderWorkspaceFiles() {
+  private shouldShowFilesSection(): boolean {
+    if (!this.grove) return false;
+    // Hub-native groves always show files (workspace tab)
+    if (!this.grove.gitRemote) return true;
+    // Git-based groves show only when shared dirs exist
+    return (this.grove.sharedDirs?.length ?? 0) > 0;
+  }
+
+  private getFileTabs(): Array<{ key: string; label: string }> {
+    const tabs: Array<{ key: string; label: string }> = [];
+    // Hub-native groves get a workspace tab
+    if (this.grove && !this.grove.gitRemote) {
+      tabs.push({ key: 'workspace', label: 'workspace' });
+    }
+    // Add one tab per shared dir
+    for (const dir of this.grove?.sharedDirs ?? []) {
+      tabs.push({ key: dir.name, label: dir.name });
+    }
+    return tabs;
+  }
+
+  private truncateTabLabel(label: string): string {
+    if (label.length <= 20) return label;
+    return '\u2026' + label.slice(label.length - 18);
+  }
+
+  private onFileTabChange(e: CustomEvent): void {
+    const panel = (e.target as HTMLElement).querySelector('sl-tab[active]')?.getAttribute('panel');
+    if (!panel) return;
+    this.activeFileTab = panel;
+    // Load files if not already loaded
+    const tabData = this.getTabData(panel);
+    if (tabData.files.length === 0 && !tabData.loading && !tabData.error) {
+      void this.loadTabFiles(panel);
+    }
+  }
+
+  private renderFilesSection() {
+    const tabs = this.getFileTabs();
+    const showTabs = tabs.length > 1;
+    const tabData = this.getTabData(this.activeFileTab);
+
     return html`
       <div class="workspace-section">
         <div class="workspace-header">
           <div class="workspace-header-left">
-            <h2>Workspace Files</h2>
+            <h2>Files</h2>
             <span class="workspace-meta">
-              ${this.workspaceFiles.length}
-              file${this.workspaceFiles.length !== 1 ? 's' : ''}${this.workspaceTotalSize > 0
-                ? ` (${this.formatFileSize(this.workspaceTotalSize)})`
+              ${tabData.files.length}
+              file${tabData.files.length !== 1 ? 's' : ''}${tabData.totalSize > 0
+                ? ` (${this.formatFileSize(tabData.totalSize)})`
                 : ''}
             </span>
           </div>
           <div style="display: flex; gap: 0.5rem; align-items: center;">
-            ${this.workspaceFiles.length > 0
+            ${this.activeFileTab === 'workspace' && tabData.files.length > 0
               ? html`
                   <sl-button
                     size="small"
@@ -1224,7 +1308,7 @@ export class ScionPageGroveDetail extends LitElement {
               ? html`
                   <input
                     type="file"
-                    id="workspace-file-input"
+                    id="file-tab-input"
                     multiple
                     style="display: none"
                     @change=${this.handleFileUpload}
@@ -1244,111 +1328,142 @@ export class ScionPageGroveDetail extends LitElement {
           </div>
         </div>
 
-        ${this.workspaceError
-          ? html`<div class="workspace-error">${this.workspaceError}</div>`
-          : ''}
-        ${this.workspaceLoading
+        ${showTabs
           ? html`
-              <div class="loading-state" style="padding: 2rem;">
-                <sl-spinner></sl-spinner>
-                <p>Loading files...</p>
-              </div>
+              <sl-tab-group class="files-tab-group" @sl-tab-show=${this.onFileTabChange}>
+                ${tabs.map(
+                  (tab) => html`
+                    <sl-tab slot="nav" panel=${tab.key} ?active=${tab.key === this.activeFileTab}>
+                      <span class="tab-label-truncated" title=${tab.label}>${this.truncateTabLabel(tab.label)}</span>
+                    </sl-tab>
+                  `
+                )}
+                ${tabs.map(
+                  (tab) => html`
+                    <sl-tab-panel name=${tab.key}
+                      >${tab.key === this.activeFileTab
+                        ? this.renderFileTabContent(this.getTabData(tab.key))
+                        : nothing}</sl-tab-panel
+                    >
+                  `
+                )}
+              </sl-tab-group>
             `
-          : this.workspaceFiles.length === 0
+          : this.renderFileTabContent(tabData)}
+      </div>
+    `;
+  }
+
+  private renderFileTabContent(tabData: {
+    files: Array<{ path: string; size: number; modTime: string; mode: string }>;
+    loading: boolean;
+    totalSize: number;
+    error: string | null;
+  }) {
+    if (tabData.error) {
+      return html`<div class="workspace-error">${tabData.error}</div>`;
+    }
+    if (tabData.loading) {
+      return html`
+        <div class="loading-state" style="padding: 2rem;">
+          <sl-spinner></sl-spinner>
+          <p>Loading files...</p>
+        </div>
+      `;
+    }
+    if (tabData.files.length === 0) {
+      return html`
+        <div class="workspace-empty">
+          <sl-icon name="file-earmark"></sl-icon>
+          <p>
+            No files in this directory.${can(this.grove?._capabilities, 'update')
+              ? ' Upload files to get started.'
+              : ''}
+          </p>
+          ${can(this.grove?._capabilities, 'update')
             ? html`
-                <div class="workspace-empty">
-                  <sl-icon name="file-earmark"></sl-icon>
-                  <p>
-                    No files in
-                    workspace.${can(this.grove?._capabilities, 'update')
-                      ? ' Upload files to seed this grove.'
-                      : ''}
-                  </p>
-                  ${can(this.grove?._capabilities, 'update')
-                    ? html`
-                        <sl-button
-                          size="small"
-                          variant="primary"
-                          ?loading=${this.uploadProgress}
-                          ?disabled=${this.uploadProgress}
-                          @click=${() => this.handleUploadClick()}
-                        >
-                          <sl-icon slot="prefix" name="upload"></sl-icon>
-                          Upload Files
-                        </sl-button>
-                      `
-                    : nothing}
-                </div>
+                <sl-button
+                  size="small"
+                  variant="primary"
+                  ?loading=${this.uploadProgress}
+                  ?disabled=${this.uploadProgress}
+                  @click=${() => this.handleUploadClick()}
+                >
+                  <sl-icon slot="prefix" name="upload"></sl-icon>
+                  Upload Files
+                </sl-button>
               `
-            : html`
-                <div class="file-table-wrapper">
-                  <table class="file-table">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Size</th>
-                        <th>Modified</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${this.workspaceFiles.slice(0, 1000).map(
-                        (file) => html`
-                          <tr>
-                            <td>
-                              <span class="file-name">
-                                <sl-icon name="file-earmark"></sl-icon>
-                                ${file.path}
-                              </span>
-                            </td>
-                            <td><span class="file-size">${this.formatFileSize(file.size)}</span></td>
-                            <td>
-                              <span class="file-date">${this.formatDate(file.modTime)}</span>
-                            </td>
-                            <td class="file-actions">
-                              ${this.isPreviewable(file.path)
-                                ? html`
-                                    <sl-icon-button
-                                      name="eye"
-                                      label="Preview ${file.path}"
-                                      @click=${() => this.handleFilePreview(file.path)}
-                                    ></sl-icon-button>
-                                  `
-                                : html`
-                                    <sl-icon-button
-                                      name="eye"
-                                      label="Preview not available for this format"
-                                      class="preview-disabled"
-                                      disabled
-                                    ></sl-icon-button>
-                                  `}
-                              <sl-icon-button
-                                name="download"
-                                label="Download ${file.path}"
-                                @click=${() => this.handleFileDownload(file.path)}
-                              ></sl-icon-button>
-                              ${can(this.grove?._capabilities, 'update')
-                                ? html`
-                                    <sl-icon-button
-                                      name="trash"
-                                      label="Delete ${file.path}"
-                                      @click=${(e: MouseEvent) => this.handleFileDelete(file.path, e)}
-                                    ></sl-icon-button>
-                                  `
-                                : nothing}
-                            </td>
-                          </tr>
+            : nothing}
+        </div>
+      `;
+    }
+    return html`
+      <div class="file-table-wrapper">
+        <table class="file-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Size</th>
+              <th>Modified</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tabData.files.slice(0, 1000).map(
+              (file) => html`
+                <tr>
+                  <td>
+                    <span class="file-name">
+                      <sl-icon name="file-earmark"></sl-icon>
+                      ${file.path}
+                    </span>
+                  </td>
+                  <td><span class="file-size">${this.formatFileSize(file.size)}</span></td>
+                  <td>
+                    <span class="file-date">${this.formatDate(file.modTime)}</span>
+                  </td>
+                  <td class="file-actions">
+                    ${this.isPreviewable(file.path)
+                      ? html`
+                          <sl-icon-button
+                            name="eye"
+                            label="Preview ${file.path}"
+                            @click=${() => this.handleFilePreview(file.path)}
+                          ></sl-icon-button>
                         `
-                      )}
-                    </tbody>
-                  </table>
-                  ${this.workspaceFiles.length > 1000
-                    ? html`<div class="file-list-truncated">
-                        File list truncated — showing 1,000 of ${this.workspaceFiles.length.toLocaleString()} files
-                      </div>`
-                    : nothing}
-                </div>
-              `}
+                      : html`
+                          <sl-icon-button
+                            name="eye"
+                            label="Preview not available for this format"
+                            class="preview-disabled"
+                            disabled
+                          ></sl-icon-button>
+                        `}
+                    <sl-icon-button
+                      name="download"
+                      label="Download ${file.path}"
+                      @click=${() => this.handleFileDownload(file.path)}
+                    ></sl-icon-button>
+                    ${can(this.grove?._capabilities, 'update')
+                      ? html`
+                          <sl-icon-button
+                            name="trash"
+                            label="Delete ${file.path}"
+                            @click=${(e: MouseEvent) => this.handleFileDelete(file.path, e)}
+                          ></sl-icon-button>
+                        `
+                      : nothing}
+                  </td>
+                </tr>
+              `
+            )}
+          </tbody>
+        </table>
+        ${tabData.files.length > 1000
+          ? html`<div class="file-list-truncated">
+              File list truncated — showing 1,000 of ${tabData.files.length.toLocaleString()} files
+            </div>`
+          : nothing}
       </div>
     `;
   }

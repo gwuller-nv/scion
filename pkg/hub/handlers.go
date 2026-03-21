@@ -3190,7 +3190,22 @@ func (s *Server) handleGroveRoutes(w http.ResponseWriter, r *http.Request) {
 		if sdPath == "" {
 			s.handleGroveSharedDirs(w, r, groveID)
 		} else {
-			s.handleGroveSharedDirByName(w, r, groveID, sdPath)
+			// Split into name and optional sub-path (e.g. "my-dir/files/some/path")
+			parts := strings.SplitN(sdPath, "/", 2)
+			name := parts[0]
+			rest := ""
+			if len(parts) > 1 {
+				rest = parts[1]
+			}
+			if strings.HasPrefix(rest, "files") {
+				filePath := strings.TrimPrefix(rest, "files")
+				filePath = strings.TrimPrefix(filePath, "/")
+				s.handleSharedDirFiles(w, r, groveID, name, filePath)
+			} else if rest == "" {
+				s.handleGroveSharedDirByName(w, r, groveID, name)
+			} else {
+				NotFound(w, "Resource")
+			}
 		}
 		return
 	}

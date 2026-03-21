@@ -455,6 +455,68 @@ func (s *Server) handleGroveWorkspaceDelete(w http.ResponseWriter, workspacePath
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleSharedDirFiles dispatches shared directory file operations.
+// Routes:
+//   - GET  (filePath="")  → list files
+//   - POST (filePath="")  → upload files
+//   - GET  (filePath!="") → download file
+//   - DELETE (filePath!="") → delete file
+func (s *Server) handleSharedDirFiles(w http.ResponseWriter, r *http.Request, groveID, dirName, filePath string) {
+	ctx := r.Context()
+
+	grove, err := s.store.GetGrove(ctx, groveID)
+	if err != nil {
+		writeErrorFromErr(w, err, "")
+		return
+	}
+
+	// Only hub-native groves have hub-local shared dir storage
+	if grove.GitRemote != "" {
+		Conflict(w, "Shared directory file browsing is only available for hub-native groves")
+		return
+	}
+
+	// Verify the shared dir is declared on this grove
+	found := false
+	for _, d := range grove.SharedDirs {
+		if d.Name == dirName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		NotFound(w, "Shared directory")
+		return
+	}
+
+	// Resolve shared dir host path: ~/.scion/groves/<slug>/shared-dirs/<name>
+	workspacePath, err := hubNativeGrovePath(grove.Slug)
+	if err != nil {
+		InternalError(w)
+		return
+	}
+	sharedDirPath := filepath.Join(workspacePath, "shared-dirs", dirName)
+
+	// Ensure the directory exists
+	if err := os.MkdirAll(sharedDirPath, 0755); err != nil {
+		InternalError(w)
+		return
+	}
+
+	switch {
+	case r.Method == http.MethodGet && filePath == "":
+		s.handleGroveWorkspaceList(w, sharedDirPath)
+	case r.Method == http.MethodGet && filePath != "":
+		s.handleGroveWorkspaceDownload(w, r, sharedDirPath, filePath)
+	case r.Method == http.MethodPost && filePath == "":
+		s.handleGroveWorkspaceUpload(w, r, sharedDirPath)
+	case r.Method == http.MethodDelete && filePath != "":
+		s.handleGroveWorkspaceDelete(w, sharedDirPath, filePath)
+	default:
+		MethodNotAllowed(w)
+	}
+}
+
 // validateWorkspaceFilePath validates that a file path is safe for workspace operations.
 // It rejects empty paths, absolute paths, path traversal, and .scion/ prefix.
 func validateWorkspaceFilePath(path string) error {

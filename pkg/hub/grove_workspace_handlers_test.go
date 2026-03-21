@@ -659,6 +659,114 @@ func TestGroveWorkspace_SlugFormatGroveID(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
 }
 
+// ============================================================================
+// Shared Directory File Tests
+// ============================================================================
+
+// addSharedDirToGrove adds a shared directory to a grove via the API.
+func addSharedDirToGrove(t *testing.T, srv *Server, groveID, dirName string) {
+	t.Helper()
+	rec := doRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/v1/groves/%s/shared-dirs", groveID), map[string]interface{}{
+		"name": dirName,
+	})
+	require.Equal(t, http.StatusCreated, rec.Code, "body: %s", rec.Body.String())
+}
+
+func TestSharedDirFiles_ListEmpty(t *testing.T) {
+	srv, _ := testServer(t)
+	grove, _ := createTestHubNativeGrove(t, srv, "SD List Empty")
+
+	addSharedDirToGrove(t, srv, grove.ID, "build-cache")
+
+	rec := doRequest(t, srv, http.MethodGet, fmt.Sprintf("/api/v1/groves/%s/shared-dirs/build-cache/files", grove.ID), nil)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+	var resp GroveWorkspaceListResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	assert.Equal(t, 0, resp.TotalCount)
+	assert.Empty(t, resp.Files)
+}
+
+func TestSharedDirFiles_UploadAndList(t *testing.T) {
+	srv, _ := testServer(t)
+	grove, workspacePath := createTestHubNativeGrove(t, srv, "SD Upload List")
+
+	addSharedDirToGrove(t, srv, grove.ID, "artifacts")
+
+	// Upload a file
+	files := map[string][]byte{
+		"output.log": []byte("build log content"),
+	}
+	rec := doMultipartRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/v1/groves/%s/shared-dirs/artifacts/files", grove.ID), files)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+	// Verify file on disk
+	content, err := os.ReadFile(filepath.Join(workspacePath, "shared-dirs", "artifacts", "output.log"))
+	require.NoError(t, err)
+	assert.Equal(t, "build log content", string(content))
+
+	// List files
+	rec = doRequest(t, srv, http.MethodGet, fmt.Sprintf("/api/v1/groves/%s/shared-dirs/artifacts/files", grove.ID), nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp GroveWorkspaceListResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	assert.Equal(t, 1, resp.TotalCount)
+	assert.Equal(t, "output.log", resp.Files[0].Path)
+}
+
+func TestSharedDirFiles_Download(t *testing.T) {
+	srv, _ := testServer(t)
+	grove, workspacePath := createTestHubNativeGrove(t, srv, "SD Download")
+
+	addSharedDirToGrove(t, srv, grove.ID, "data")
+
+	// Create a file directly
+	sharedDirPath := filepath.Join(workspacePath, "shared-dirs", "data")
+	require.NoError(t, os.MkdirAll(sharedDirPath, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(sharedDirPath, "result.txt"), []byte("result data"), 0644))
+
+	rec := doRequest(t, srv, http.MethodGet, fmt.Sprintf("/api/v1/groves/%s/shared-dirs/data/files/result.txt", grove.ID), nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "result data", rec.Body.String())
+}
+
+func TestSharedDirFiles_Delete(t *testing.T) {
+	srv, _ := testServer(t)
+	grove, workspacePath := createTestHubNativeGrove(t, srv, "SD Delete")
+
+	addSharedDirToGrove(t, srv, grove.ID, "temp")
+
+	// Create a file
+	sharedDirPath := filepath.Join(workspacePath, "shared-dirs", "temp")
+	require.NoError(t, os.MkdirAll(sharedDirPath, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(sharedDirPath, "old.txt"), []byte("old"), 0644))
+
+	rec := doRequest(t, srv, http.MethodDelete, fmt.Sprintf("/api/v1/groves/%s/shared-dirs/temp/files/old.txt", grove.ID), nil)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+
+	// Verify file is gone
+	_, err := os.Stat(filepath.Join(sharedDirPath, "old.txt"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestSharedDirFiles_UndeclaredDirRejected(t *testing.T) {
+	srv, _ := testServer(t)
+	grove, _ := createTestHubNativeGrove(t, srv, "SD Undeclared")
+
+	// Try to access files in a shared dir that hasn't been declared
+	rec := doRequest(t, srv, http.MethodGet, fmt.Sprintf("/api/v1/groves/%s/shared-dirs/nonexistent/files", grove.ID), nil)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestSharedDirFiles_GitGroveRejected(t *testing.T) {
+	srv, _ := testServer(t)
+	grove := createTestGitGrove(t, srv, "SD Git Grove", "github.com/test/sd-files")
+
+	rec := doRequest(t, srv, http.MethodGet, fmt.Sprintf("/api/v1/groves/%s/shared-dirs/cache/files", grove.ID), nil)
+	assert.Equal(t, http.StatusConflict, rec.Code)
+}
+
 // Ensure the store's ErrNotFound is wired correctly for grove lookups.
 
 func init() {
