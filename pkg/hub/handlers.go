@@ -7658,6 +7658,12 @@ func (s *Server) handleGroveSyncTemplates(w http.ResponseWriter, r *http.Request
 		},
 	}
 
+	// Populate GitClone config for git-anchored groves so the broker
+	// clones the repo before running the sync command. Without this,
+	// the container starts with an empty workspace and the sync exits
+	// immediately because there are no templates to find.
+	s.populateAgentConfig(agent, grove, nil)
+
 	if err := s.store.CreateAgent(ctx, agent); err != nil {
 		writeErrorFromErr(w, err, "")
 		return

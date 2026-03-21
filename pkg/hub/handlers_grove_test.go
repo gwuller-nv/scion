@@ -928,6 +928,55 @@ func TestGroveSyncTemplates_CreatesAgent(t *testing.T) {
 	require.NotNil(t, agent.AppliedConfig)
 	assert.Equal(t, "generic", agent.AppliedConfig.HarnessConfig)
 	assert.Equal(t, "scion templates sync --all --force", agent.AppliedConfig.Task)
+	assert.Nil(t, agent.AppliedConfig.GitClone, "non-git grove should have no GitClone config")
+}
+
+// TestGroveSyncTemplates_GitGrovePopulatesGitClone verifies that the template-sync
+// agent gets GitClone config populated for git-anchored groves.
+func TestGroveSyncTemplates_GitGrovePopulatesGitClone(t *testing.T) {
+	srv, s := testServer(t)
+	ctx := context.Background()
+
+	broker := &store.RuntimeBroker{
+		ID:     "broker-sync-git",
+		Slug:   "sync-git-broker",
+		Name:   "Sync Git Broker",
+		Status: store.BrokerStatusOnline,
+	}
+	require.NoError(t, s.CreateRuntimeBroker(ctx, broker))
+
+	grove := &store.Grove{
+		ID:                     "grove-sync-git",
+		Slug:                   "sync-git-grove",
+		Name:                   "Sync Git Grove",
+		GitRemote:              "github.com/example/repo",
+		DefaultRuntimeBrokerID: broker.ID,
+	}
+	require.NoError(t, s.CreateGrove(ctx, grove))
+	require.NoError(t, s.AddGroveProvider(ctx, &store.GroveProvider{
+		GroveID:  grove.ID,
+		BrokerID: broker.ID,
+		Status:   store.BrokerStatusOnline,
+		LinkedBy: "test",
+	}))
+
+	disp := &createAgentDispatcher{createPhase: string(state.PhaseRunning)}
+	srv.SetDispatcher(disp)
+
+	rec := doRequest(t, srv, http.MethodPost, "/api/v1/groves/"+grove.ID+"/sync-templates", nil)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+	var resp SyncTemplatesResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+
+	agent, err := s.GetAgent(ctx, resp.AgentID)
+	require.NoError(t, err)
+
+	require.NotNil(t, agent.AppliedConfig)
+	require.NotNil(t, agent.AppliedConfig.GitClone, "git-anchored grove should have GitClone config")
+	assert.Equal(t, "https://github.com/example/repo.git", agent.AppliedConfig.GitClone.URL)
+	assert.Equal(t, "main", agent.AppliedConfig.GitClone.Branch)
+	assert.Equal(t, 1, agent.AppliedConfig.GitClone.Depth)
 }
 
 // TestGroveSyncTemplates_MethodNotAllowed verifies non-POST methods are rejected.
