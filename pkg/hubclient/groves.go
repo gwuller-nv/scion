@@ -277,8 +277,8 @@ func (s *groveService) Delete(ctx context.Context, groveID string, deleteAgents 
 func (s *groveService) ListAgents(ctx context.Context, groveID string, opts *ListAgentsOptions) (*ListAgentsResponse, error) {
 	query := url.Values{}
 	if opts != nil {
-		if opts.Status != "" {
-			query.Set("status", opts.Status)
+		if opts.Phase != "" {
+			query.Set("phase", opts.Phase)
 		}
 		if opts.RuntimeBrokerID != "" {
 			query.Set("runtimeBrokerId", opts.RuntimeBrokerID)

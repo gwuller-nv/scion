@@ -254,7 +254,7 @@ func sendMessageViaHub(hubCtx *HubContext, agentName string, message string, int
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		resp, err := agentSvc.List(ctx, &hubclient.ListAgentsOptions{Status: "running"})
+		resp, err := agentSvc.List(ctx, &hubclient.ListAgentsOptions{Phase: "running"})
 		if err != nil {
 			return wrapHubError(fmt.Errorf("failed to list agents via Hub: %w", err))
 		}
@@ -299,7 +299,7 @@ func sendMessageViaHub(hubCtx *HubContext, agentName string, message string, int
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		resp, err := agentSvc.List(ctx, &hubclient.ListAgentsOptions{Status: "running"})
+		resp, err := agentSvc.List(ctx, &hubclient.ListAgentsOptions{Phase: "running"})
 		if err != nil {
 			return wrapHubError(fmt.Errorf("failed to list agents via Hub: %w", err))
 		}

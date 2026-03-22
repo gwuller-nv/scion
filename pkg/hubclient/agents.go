@@ -115,7 +115,7 @@ func (s *agentService) agentsPath() string {
 // ListAgentsOptions configures agent list filtering.
 type ListAgentsOptions struct {
 	GroveID         string            // Filter by grove
-	Status          string            // Filter by status
+	Phase           string            // Filter by lifecycle phase (created, running, stopped, error, etc.)
 	RuntimeBrokerID string            // Filter by runtime broker
 	Labels          map[string]string // Label selector
 	IncludeDeleted  bool              // Include soft-deleted agents
@@ -256,8 +256,8 @@ func (s *agentService) List(ctx context.Context, opts *ListAgentsOptions) (*List
 		if opts.GroveID != "" {
 			query.Set("groveId", opts.GroveID)
 		}
-		if opts.Status != "" {
-			query.Set("status", opts.Status)
+		if opts.Phase != "" {
+			query.Set("phase", opts.Phase)
 		}
 		if opts.RuntimeBrokerID != "" {
 			query.Set("runtimeBrokerId", opts.RuntimeBrokerID)

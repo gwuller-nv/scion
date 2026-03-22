@@ -75,9 +75,8 @@ var deleteCmd = &cobra.Command{
 		}
 
 		if deleteStopped {
-			// --stopped flag with Hub is not yet supported
 			if hubCtx != nil {
-				return fmt.Errorf("--stopped flag is not yet supported when using Hub integration\n\nTo delete stopped agents locally, use: scion --no-hub delete --stopped")
+				return deleteStoppedViaHub(hubCtx)
 			}
 
 			// Require an explicit grove context — error if not in a grove (unless --global)
@@ -267,6 +266,31 @@ func deleteAgentsViaHub(hubCtx *HubContext, agentNames []string) error {
 		return fmt.Errorf("failed to delete some agents via Hub:\n  %s", strings.Join(errs, "\n  "))
 	}
 	return nil
+}
+
+func deleteStoppedViaHub(hubCtx *HubContext) error {
+	PrintUsingHub(hubCtx.Endpoint)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	agentSvc := hubCtx.Client.GroveAgents(hubCtx.GroveID)
+	resp, err := agentSvc.List(ctx, &hubclient.ListAgentsOptions{Phase: "stopped"})
+	if err != nil {
+		return wrapHubError(fmt.Errorf("failed to list agents via Hub: %w", err))
+	}
+
+	if len(resp.Agents) == 0 {
+		statusln("No stopped agents found.")
+		return nil
+	}
+
+	var agentNames []string
+	for _, a := range resp.Agents {
+		agentNames = append(agentNames, a.Name)
+	}
+
+	return deleteAgentsViaHub(hubCtx, agentNames)
 }
 
 func deleteAgentLocal(agentName string) error {
