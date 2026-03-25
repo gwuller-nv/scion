@@ -223,7 +223,9 @@ type RuntimeBrokerClient interface {
 	// RestartAgent restarts an agent on a remote runtime broker.
 	// brokerID is used for HMAC authentication lookup.
 	// groveID scopes the lookup to a specific grove (required for uniqueness).
-	RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string) error
+	// resolvedEnv carries fresh auth tokens and identity vars so the restarted
+	// container retains Hub connectivity.
+	RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string, resolvedEnv map[string]string) error
 
 	// DeleteAgent deletes an agent from a remote runtime broker.
 	// brokerID is used for HMAC authentication lookup.

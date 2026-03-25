@@ -129,7 +129,7 @@ func (m *mockRuntimeBrokerClient) StopAgent(ctx context.Context, brokerID, broke
 	return m.returnErr
 }
 
-func (m *mockRuntimeBrokerClient) RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string) error {
+func (m *mockRuntimeBrokerClient) RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string, resolvedEnv map[string]string) error {
 	m.restartCalled = true
 	m.lastBrokerID = brokerID
 	m.lastEndpoint = brokerEndpoint

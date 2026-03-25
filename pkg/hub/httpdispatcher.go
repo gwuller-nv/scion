@@ -56,8 +56,8 @@ func (c *HTTPRuntimeBrokerClient) StopAgent(ctx context.Context, brokerID, broke
 	return c.transport.StopAgent(ctx, brokerID, brokerEndpoint, agentID, groveID)
 }
 
-func (c *HTTPRuntimeBrokerClient) RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string) error {
-	return c.transport.RestartAgent(ctx, brokerID, brokerEndpoint, agentID, groveID)
+func (c *HTTPRuntimeBrokerClient) RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string, resolvedEnv map[string]string) error {
+	return c.transport.RestartAgent(ctx, brokerID, brokerEndpoint, agentID, groveID, resolvedEnv)
 }
 
 func (c *HTTPRuntimeBrokerClient) DeleteAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string, deleteFiles, removeBranch, softDelete bool, deletedAt time.Time) error {
@@ -1031,6 +1031,8 @@ func (d *HTTPAgentDispatcher) DispatchAgentStop(ctx context.Context, agent *stor
 }
 
 // DispatchAgentRestart restarts an agent on the runtime broker.
+// It generates a fresh auth token so the restarted container has valid
+// Hub credentials, preventing auth loss across container restarts.
 func (d *HTTPAgentDispatcher) DispatchAgentRestart(ctx context.Context, agent *store.Agent) error {
 	if agent.RuntimeBrokerID == "" {
 		return fmt.Errorf("agent has no runtime broker assigned")
@@ -1041,7 +1043,44 @@ func (d *HTTPAgentDispatcher) DispatchAgentRestart(ctx context.Context, agent *s
 		return err
 	}
 
-	return d.client.RestartAgent(ctx, agent.RuntimeBrokerID, endpoint, agent.Slug, agent.GroveID)
+	// Build resolved env with fresh auth token and identity vars so the
+	// restarted container retains Hub connectivity. Without this, the
+	// broker's restartAgent handler has no token to inject.
+	resolvedEnv := make(map[string]string)
+	if agent.ID != "" {
+		resolvedEnv["SCION_AGENT_ID"] = agent.ID
+	}
+	if agent.GroveID != "" {
+		resolvedEnv["SCION_GROVE_ID"] = agent.GroveID
+	}
+	if agent.Slug != "" {
+		resolvedEnv["SCION_AGENT_SLUG"] = agent.Slug
+	}
+	if d.hubEndpoint != "" {
+		resolvedEnv["SCION_HUB_ENDPOINT"] = d.hubEndpoint
+	}
+
+	if d.tokenGenerator != nil {
+		var additionalScopes []AgentTokenScope
+		if agent.AppliedConfig != nil {
+			for _, s := range agent.AppliedConfig.HubAccessScopes {
+				additionalScopes = append(additionalScopes, AgentTokenScope(s))
+			}
+			if gcpID := agent.AppliedConfig.GCPIdentity; gcpID != nil && gcpID.MetadataMode == store.GCPMetadataModeAssign && gcpID.ServiceAccountID != "" {
+				additionalScopes = append(additionalScopes, GCPTokenScopeForSA(gcpID.ServiceAccountID))
+			}
+		}
+		token, err := d.tokenGenerator.GenerateAgentToken(agent.ID, agent.GroveID, additionalScopes...)
+		if err != nil {
+			if d.debug {
+				d.log.Warn("DispatchAgentRestart: failed to generate agent token", "error", err)
+			}
+		} else if token != "" {
+			resolvedEnv["SCION_AUTH_TOKEN"] = token
+		}
+	}
+
+	return d.client.RestartAgent(ctx, agent.RuntimeBrokerID, endpoint, agent.Slug, agent.GroveID, resolvedEnv)
 }
 
 // DispatchAgentDelete deletes an agent from the runtime broker.

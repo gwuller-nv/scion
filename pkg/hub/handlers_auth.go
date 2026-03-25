@@ -517,6 +517,17 @@ func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 
 // handleAuthMe handles GET /api/v1/auth/me.
 func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
+	// Check for agent identity first — agent tokens don't implement UserIdentity
+	// but should still be recognized as authenticated callers.
+	if agentIdent := GetAgentIdentityFromContext(r.Context()); agentIdent != nil {
+		writeJSON(w, http.StatusOK, UserResponse{
+			ID:          agentIdent.ID(),
+			DisplayName: "agent:" + agentIdent.ID(),
+			Role:        "agent",
+		})
+		return
+	}
+
 	user := GetUserIdentityFromContext(r.Context())
 	if user == nil {
 		Unauthorized(w)

@@ -230,12 +230,23 @@ func (t *brokerHTTPTransport) StopAgent(ctx context.Context, brokerID, brokerEnd
 	return nil
 }
 
-func (t *brokerHTTPTransport) RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string) error {
+func (t *brokerHTTPTransport) RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string, resolvedEnv map[string]string) error {
 	endpoint := fmt.Sprintf("%s/api/v1/agents/%s/restart", strings.TrimSuffix(brokerEndpoint, "/"), url.PathEscape(agentID))
 	if groveID != "" {
 		endpoint += "?groveId=" + url.QueryEscape(groveID)
 	}
-	resp, err := t.doRequest(ctx, brokerID, http.MethodPost, endpoint, nil)
+	var body []byte
+	if len(resolvedEnv) > 0 {
+		payload := map[string]interface{}{
+			"resolvedEnv": resolvedEnv,
+		}
+		var err error
+		body, err = json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal restart request: %w", err)
+		}
+	}
+	resp, err := t.doRequest(ctx, brokerID, http.MethodPost, endpoint, body)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}

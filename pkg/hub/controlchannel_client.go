@@ -140,14 +140,25 @@ func (c *ControlChannelBrokerClient) StopAgent(ctx context.Context, brokerID, br
 }
 
 // RestartAgent restarts an agent via control channel.
-func (c *ControlChannelBrokerClient) RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string) error {
+func (c *ControlChannelBrokerClient) RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string, resolvedEnv map[string]string) error {
 	_ = brokerEndpoint
 	path := fmt.Sprintf("/api/v1/agents/%s/restart", url.PathEscape(agentID))
 	query := ""
 	if groveID != "" {
 		query = "groveId=" + url.QueryEscape(groveID)
 	}
-	_, err := c.doRequest(ctx, brokerID, "POST", path, query, nil)
+	var body []byte
+	if len(resolvedEnv) > 0 {
+		payload := map[string]interface{}{
+			"resolvedEnv": resolvedEnv,
+		}
+		var err error
+		body, err = json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal restart request: %w", err)
+		}
+	}
+	_, err := c.doRequest(ctx, brokerID, "POST", path, query, body)
 	return err
 }
 
@@ -448,11 +459,11 @@ func (c *HybridBrokerClient) StopAgent(ctx context.Context, brokerID, brokerEndp
 }
 
 // RestartAgent restarts an agent, preferring control channel.
-func (c *HybridBrokerClient) RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string) error {
+func (c *HybridBrokerClient) RestartAgent(ctx context.Context, brokerID, brokerEndpoint, agentID, groveID string, resolvedEnv map[string]string) error {
 	if c.useControlChannel(brokerID) {
-		return c.controlChannel.RestartAgent(ctx, brokerID, brokerEndpoint, agentID, groveID)
+		return c.controlChannel.RestartAgent(ctx, brokerID, brokerEndpoint, agentID, groveID, resolvedEnv)
 	}
-	return c.httpClient.RestartAgent(ctx, brokerID, brokerEndpoint, agentID, groveID)
+	return c.httpClient.RestartAgent(ctx, brokerID, brokerEndpoint, agentID, groveID, resolvedEnv)
 }
 
 // DeleteAgent deletes an agent, preferring control channel.

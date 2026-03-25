@@ -1113,6 +1113,16 @@ func (s *Server) stopAgent(w http.ResponseWriter, r *http.Request, id, groveID s
 func (s *Server) restartAgent(w http.ResponseWriter, r *http.Request, id, groveID string) {
 	ctx := r.Context()
 
+	// Read optional resolvedEnv from request body (hub sends fresh auth token)
+	var restartReq struct {
+		ResolvedEnv map[string]string `json:"resolvedEnv"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&restartReq); err != nil {
+			s.agentLifecycleLog.Debug("No resolvedEnv in restart request body (ignoring decode error)", "agent_id", id, "error", err)
+		}
+	}
+
 	// Look up agent to get its name and grove path
 	agentName := id
 	var grovePath string
@@ -1130,6 +1140,7 @@ func (s *Server) restartAgent(w http.ResponseWriter, r *http.Request, id, groveI
 	sc, err := s.buildStartContext(ctx, startContextInputs{
 		Name:        agentName,
 		GrovePath:   grovePath,
+		ResolvedEnv: restartReq.ResolvedEnv,
 		HTTPRequest: r,
 	})
 	if err != nil {
