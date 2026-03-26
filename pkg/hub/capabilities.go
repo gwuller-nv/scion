@@ -58,6 +58,7 @@ func agentResource(a *store.Agent) Resource {
 		ParentType: "grove",
 		ParentID:   a.GroveID,
 		Labels:     a.Labels,
+		Ancestry:   a.Ancestry,
 	}
 }
 

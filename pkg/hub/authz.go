@@ -54,6 +54,7 @@ type Resource struct {
 	ParentType string            // e.g. "grove" for an agent
 	ParentID   string            // Parent resource ID
 	Labels     map[string]string // Resource labels for condition matching
+	Ancestry   []string          // Ordered ancestor chain [root, ..., parent] for transitive access
 }
 
 // Decision represents the result of an authorization check.
@@ -131,6 +132,14 @@ func (a *AuthzService) checkAccessForUser(ctx context.Context, user UserIdentity
 		}
 	}
 
+	// 2.5. Ancestry-based transitive access
+	if canAccessAsAncestor(user.ID(), resource) {
+		return Decision{
+			Allowed: true,
+			Reason:  "ancestor access",
+		}
+	}
+
 	// 3. Build principal refs: direct user + effective groups
 	principals := []store.PrincipalRef{
 		{Type: "user", ID: user.ID()},
@@ -156,6 +165,14 @@ func (a *AuthzService) checkAccessForUser(ctx context.Context, user UserIdentity
 
 // checkAccessForAgent evaluates access for an agent principal.
 func (a *AuthzService) checkAccessForAgent(ctx context.Context, agent AgentIdentity, resource Resource, action Action) Decision {
+	// 0. Ancestry-based transitive access
+	if canAccessAsAncestor(agent.ID(), resource) {
+		return Decision{
+			Allowed: true,
+			Reason:  "ancestor access",
+		}
+	}
+
 	// 1. Build principal refs: direct agent + effective groups
 	principals := []store.PrincipalRef{
 		{Type: "agent", ID: agent.ID()},
@@ -386,6 +403,18 @@ func (a *AuthzService) enforceUATConstraints(scoped *ScopedUserIdentity, resourc
 	}
 
 	return nil
+}
+
+// canAccessAsAncestor checks if the principal appears in the resource's ancestry chain.
+// This provides transitive access: any ancestor (human or agent) in the creation
+// chain can access the resource.
+func canAccessAsAncestor(principalID string, resource Resource) bool {
+	for _, id := range resource.Ancestry {
+		if id == principalID {
+			return true
+		}
+	}
+	return false
 }
 
 // evaluateTimeConditions checks time-based conditions.

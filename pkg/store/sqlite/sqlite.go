@@ -112,6 +112,7 @@ func (s *SQLiteStore) Migrate(ctx context.Context) error {
 		migrationV34,
 		migrationV35,
 		migrationV36,
+		migrationV37,
 	}
 
 	// Create migrations table if not exists
@@ -852,6 +853,11 @@ const migrationV36 = `
 ALTER TABLE groves ADD COLUMN git_identity TEXT;
 `
 
+// Migration V37: Add ancestry column for transitive access control.
+const migrationV37 = `
+ALTER TABLE agents ADD COLUMN ancestry TEXT;
+`
+
 // Helper functions for JSON marshaling/unmarshaling
 func marshalJSON(v interface{}) string {
 	if v == nil {
@@ -931,8 +937,8 @@ func (s *SQLiteStore) CreateAgent(ctx context.Context, agent *store.Agent) error
 			image, detached, runtime, runtime_broker_id, web_pty_enabled, task_summary, message,
 			applied_config,
 			created_at, updated_at, last_seen, last_activity_event, deleted_at,
-			created_by, owner_id, visibility, state_version
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			created_by, owner_id, visibility, state_version, ancestry
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		agent.ID, agent.Slug, agent.Name, agent.Template, agent.GroveID,
 		marshalJSON(agent.Labels), marshalJSON(agent.Annotations),
@@ -942,7 +948,7 @@ func (s *SQLiteStore) CreateAgent(ctx context.Context, agent *store.Agent) error
 		agent.Image, agent.Detached, agent.Runtime, nullableString(agent.RuntimeBrokerID), agent.WebPTYEnabled, agent.TaskSummary, agent.Message,
 		marshalJSON(agent.AppliedConfig),
 		agent.Created, agent.Updated, nullableTime(agent.LastSeen), nullableTime(agent.LastActivityEvent), nullableTime(agent.DeletedAt),
-		agent.CreatedBy, agent.OwnerID, agent.Visibility, agent.StateVersion,
+		agent.CreatedBy, agent.OwnerID, agent.Visibility, agent.StateVersion, marshalJSON(agent.Ancestry),
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -955,7 +961,7 @@ func (s *SQLiteStore) CreateAgent(ctx context.Context, agent *store.Agent) error
 
 func (s *SQLiteStore) GetAgent(ctx context.Context, id string) (*store.Agent, error) {
 	agent := &store.Agent{}
-	var labels, annotations, appliedConfig string
+	var labels, annotations, appliedConfig, ancestry string
 	var lastSeen, lastActivityEvent, deletedAt, startedAt sql.NullTime
 	var runtimeBrokerID, message, toolName sql.NullString
 
@@ -969,7 +975,7 @@ func (s *SQLiteStore) GetAgent(ctx context.Context, id string) (*store.Agent, er
 			image, detached, runtime, runtime_broker_id, web_pty_enabled, task_summary, message,
 			applied_config,
 			created_at, updated_at, last_seen, last_activity_event, deleted_at, started_at,
-			created_by, owner_id, visibility, state_version
+			created_by, owner_id, visibility, state_version, ancestry
 		FROM agents WHERE id = ?
 	`, id).Scan(
 		&agent.ID, &agent.Slug, &agent.Name, &agent.Template, &agent.GroveID,
@@ -981,7 +987,7 @@ func (s *SQLiteStore) GetAgent(ctx context.Context, id string) (*store.Agent, er
 		&agent.Image, &agent.Detached, &agent.Runtime, &runtimeBrokerID, &agent.WebPTYEnabled, &agent.TaskSummary, &message,
 		&appliedConfig,
 		&agent.Created, &agent.Updated, &lastSeen, &lastActivityEvent, &deletedAt, &startedAt,
-		&agent.CreatedBy, &agent.OwnerID, &agent.Visibility, &agent.StateVersion,
+		&agent.CreatedBy, &agent.OwnerID, &agent.Visibility, &agent.StateVersion, &ancestry,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -993,6 +999,7 @@ func (s *SQLiteStore) GetAgent(ctx context.Context, id string) (*store.Agent, er
 	unmarshalJSON(labels, &agent.Labels)
 	unmarshalJSON(annotations, &agent.Annotations)
 	unmarshalJSON(appliedConfig, &agent.AppliedConfig)
+	unmarshalJSON(ancestry, &agent.Ancestry)
 	if lastSeen.Valid {
 		agent.LastSeen = lastSeen.Time
 	}
@@ -1020,7 +1027,7 @@ func (s *SQLiteStore) GetAgent(ctx context.Context, id string) (*store.Agent, er
 
 func (s *SQLiteStore) GetAgentBySlug(ctx context.Context, groveID, slug string) (*store.Agent, error) {
 	agent := &store.Agent{}
-	var labels, annotations, appliedConfig string
+	var labels, annotations, appliedConfig, ancestry string
 	var lastSeen, lastActivityEvent, deletedAt, startedAt sql.NullTime
 	var runtimeBrokerID, message, toolName sql.NullString
 
@@ -1034,7 +1041,7 @@ func (s *SQLiteStore) GetAgentBySlug(ctx context.Context, groveID, slug string) 
 			image, detached, runtime, runtime_broker_id, web_pty_enabled, task_summary, message,
 			applied_config,
 			created_at, updated_at, last_seen, last_activity_event, deleted_at, started_at,
-			created_by, owner_id, visibility, state_version
+			created_by, owner_id, visibility, state_version, ancestry
 		FROM agents WHERE grove_id = ? AND agent_id = ?
 	`, groveID, slug).Scan(
 		&agent.ID, &agent.Slug, &agent.Name, &agent.Template, &agent.GroveID,
@@ -1046,7 +1053,7 @@ func (s *SQLiteStore) GetAgentBySlug(ctx context.Context, groveID, slug string) 
 		&agent.Image, &agent.Detached, &agent.Runtime, &runtimeBrokerID, &agent.WebPTYEnabled, &agent.TaskSummary, &message,
 		&appliedConfig,
 		&agent.Created, &agent.Updated, &lastSeen, &lastActivityEvent, &deletedAt, &startedAt,
-		&agent.CreatedBy, &agent.OwnerID, &agent.Visibility, &agent.StateVersion,
+		&agent.CreatedBy, &agent.OwnerID, &agent.Visibility, &agent.StateVersion, &ancestry,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -1058,6 +1065,7 @@ func (s *SQLiteStore) GetAgentBySlug(ctx context.Context, groveID, slug string) 
 	unmarshalJSON(labels, &agent.Labels)
 	unmarshalJSON(annotations, &agent.Annotations)
 	unmarshalJSON(appliedConfig, &agent.AppliedConfig)
+	unmarshalJSON(ancestry, &agent.Ancestry)
 	if lastSeen.Valid {
 		agent.LastSeen = lastSeen.Time
 	}
@@ -1181,6 +1189,10 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, filter store.AgentFilter, 
 		conditions = append(conditions, "phase = ?")
 		args = append(args, filter.Phase)
 	}
+	if filter.AncestorID != "" {
+		conditions = append(conditions, "EXISTS (SELECT 1 FROM json_each(ancestry) WHERE json_each.value = ?)")
+		args = append(args, filter.AncestorID)
+	}
 
 	// Exclude soft-deleted agents unless explicitly requested
 	if !filter.IncludeDeleted {
@@ -1218,7 +1230,7 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, filter store.AgentFilter, 
 			image, detached, runtime, runtime_broker_id, web_pty_enabled, task_summary, message,
 			applied_config,
 			created_at, updated_at, last_seen, last_activity_event, deleted_at, started_at,
-			created_by, owner_id, visibility, state_version
+			created_by, owner_id, visibility, state_version, ancestry
 		FROM agents %s ORDER BY created_at DESC LIMIT ?
 	`, whereClause)
 	args = append(args, limit+1) // Fetch one extra to determine if there's a next page
@@ -1232,7 +1244,7 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, filter store.AgentFilter, 
 	var agents []store.Agent
 	for rows.Next() {
 		var agent store.Agent
-		var labels, annotations, appliedConfig string
+		var labels, annotations, appliedConfig, ancestry string
 		var lastSeen, lastActivityEvent, deletedAt, startedAt sql.NullTime
 		var runtimeBrokerID, message, toolName sql.NullString
 
@@ -1246,7 +1258,7 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, filter store.AgentFilter, 
 			&agent.Image, &agent.Detached, &agent.Runtime, &runtimeBrokerID, &agent.WebPTYEnabled, &agent.TaskSummary, &message,
 			&appliedConfig,
 			&agent.Created, &agent.Updated, &lastSeen, &lastActivityEvent, &deletedAt, &startedAt,
-			&agent.CreatedBy, &agent.OwnerID, &agent.Visibility, &agent.StateVersion,
+			&agent.CreatedBy, &agent.OwnerID, &agent.Visibility, &agent.StateVersion, &ancestry,
 		); err != nil {
 			return nil, err
 		}
@@ -1254,6 +1266,7 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, filter store.AgentFilter, 
 		unmarshalJSON(labels, &agent.Labels)
 		unmarshalJSON(annotations, &agent.Annotations)
 		unmarshalJSON(appliedConfig, &agent.AppliedConfig)
+		unmarshalJSON(ancestry, &agent.Ancestry)
 		if lastSeen.Valid {
 			agent.LastSeen = lastSeen.Time
 		}
@@ -1413,7 +1426,7 @@ func (s *SQLiteStore) MarkStaleAgentsOffline(ctx context.Context, threshold time
 			image, detached, runtime, runtime_broker_id, web_pty_enabled, task_summary, message,
 			applied_config,
 			created_at, updated_at, last_seen, last_activity_event, deleted_at, started_at,
-			created_by, owner_id, visibility, state_version
+			created_by, owner_id, visibility, state_version, ancestry
 		FROM agents
 		WHERE activity = 'offline' AND updated_at = ?
 		  AND last_seen < ?
@@ -1428,7 +1441,7 @@ func (s *SQLiteStore) MarkStaleAgentsOffline(ctx context.Context, threshold time
 	var agents []store.Agent
 	for rows.Next() {
 		var agent store.Agent
-		var labels, annotations, appliedConfig string
+		var labels, annotations, appliedConfig, ancestry string
 		var lastSeen, lastActivityEvent, deletedAt, startedAt sql.NullTime
 		var runtimeBrokerID, message, toolName sql.NullString
 
@@ -1442,7 +1455,7 @@ func (s *SQLiteStore) MarkStaleAgentsOffline(ctx context.Context, threshold time
 			&agent.Image, &agent.Detached, &agent.Runtime, &runtimeBrokerID, &agent.WebPTYEnabled, &agent.TaskSummary, &message,
 			&appliedConfig,
 			&agent.Created, &agent.Updated, &lastSeen, &lastActivityEvent, &deletedAt, &startedAt,
-			&agent.CreatedBy, &agent.OwnerID, &agent.Visibility, &agent.StateVersion,
+			&agent.CreatedBy, &agent.OwnerID, &agent.Visibility, &agent.StateVersion, &ancestry,
 		); err != nil {
 			return nil, err
 		}
@@ -1450,6 +1463,7 @@ func (s *SQLiteStore) MarkStaleAgentsOffline(ctx context.Context, threshold time
 		unmarshalJSON(labels, &agent.Labels)
 		unmarshalJSON(annotations, &agent.Annotations)
 		unmarshalJSON(appliedConfig, &agent.AppliedConfig)
+		unmarshalJSON(ancestry, &agent.Ancestry)
 		if lastSeen.Valid {
 			agent.LastSeen = lastSeen.Time
 		}
@@ -1524,7 +1538,7 @@ func (s *SQLiteStore) MarkStalledAgents(ctx context.Context, activityThreshold, 
 			image, detached, runtime, runtime_broker_id, web_pty_enabled, task_summary, message,
 			applied_config,
 			created_at, updated_at, last_seen, last_activity_event, deleted_at, started_at,
-			created_by, owner_id, visibility, state_version
+			created_by, owner_id, visibility, state_version, ancestry
 		FROM agents
 		WHERE activity = 'stalled' AND updated_at = ?
 		  AND last_activity_event < ?
@@ -1541,7 +1555,7 @@ func (s *SQLiteStore) MarkStalledAgents(ctx context.Context, activityThreshold, 
 	var agents []store.Agent
 	for rows.Next() {
 		var agent store.Agent
-		var labels, annotations, appliedConfig string
+		var labels, annotations, appliedConfig, ancestry string
 		var lastSeen, lastActivityEvent, deletedAt, startedAt sql.NullTime
 		var runtimeBrokerID, message, toolName sql.NullString
 
@@ -1555,7 +1569,7 @@ func (s *SQLiteStore) MarkStalledAgents(ctx context.Context, activityThreshold, 
 			&agent.Image, &agent.Detached, &agent.Runtime, &runtimeBrokerID, &agent.WebPTYEnabled, &agent.TaskSummary, &message,
 			&appliedConfig,
 			&agent.Created, &agent.Updated, &lastSeen, &lastActivityEvent, &deletedAt, &startedAt,
-			&agent.CreatedBy, &agent.OwnerID, &agent.Visibility, &agent.StateVersion,
+			&agent.CreatedBy, &agent.OwnerID, &agent.Visibility, &agent.StateVersion, &ancestry,
 		); err != nil {
 			return nil, err
 		}
@@ -1563,6 +1577,7 @@ func (s *SQLiteStore) MarkStalledAgents(ctx context.Context, activityThreshold, 
 		unmarshalJSON(labels, &agent.Labels)
 		unmarshalJSON(annotations, &agent.Annotations)
 		unmarshalJSON(appliedConfig, &agent.AppliedConfig)
+		unmarshalJSON(ancestry, &agent.Ancestry)
 		if lastSeen.Valid {
 			agent.LastSeen = lastSeen.Time
 		}

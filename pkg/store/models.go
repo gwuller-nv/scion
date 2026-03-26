@@ -84,6 +84,11 @@ type Agent struct {
 	OwnerID    string `json:"ownerId,omitempty"`
 	Visibility string `json:"visibility"` // private, team, public
 
+	// Ancestry chain for transitive access control.
+	// Ordered list of ancestor IDs: [root, ..., parent].
+	// Denormalized at creation time; immutable after creation.
+	Ancestry []string `json:"ancestry,omitempty"`
+
 	// Optimistic locking
 	StateVersion int64 `json:"stateVersion"`
 }
@@ -1101,6 +1106,7 @@ func (a *Agent) ToAPI() *api.AgentInfo {
 		CreatedBy:  a.CreatedBy,
 		OwnerID:    a.OwnerID,
 		Visibility: a.Visibility,
+		Ancestry:   a.Ancestry,
 
 		// Optimistic locking
 		StateVersion: a.StateVersion,

@@ -174,6 +174,114 @@ func TestAgentList(t *testing.T) {
 	assert.Len(t, result.Items, 2)
 }
 
+func TestAgentAncestry(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	grove := &store.Grove{
+		ID: api.NewUUID(), Name: "Ancestry Grove", Slug: "ancestry-grove",
+		Visibility: store.VisibilityPrivate,
+	}
+	require.NoError(t, s.CreateGrove(ctx, grove))
+
+	userID := "user-root-123"
+
+	// Agent A: created by user (ancestry = [userID])
+	agentA := &store.Agent{
+		ID: api.NewUUID(), Slug: "agent-a", Name: "Agent A",
+		Template: "claude", GroveID: grove.ID,
+		Phase: string(state.PhaseRunning), Visibility: store.VisibilityPrivate,
+		CreatedBy: userID, OwnerID: userID,
+		Ancestry: []string{userID},
+	}
+	require.NoError(t, s.CreateAgent(ctx, agentA))
+
+	// Agent B: created by Agent A (ancestry = [userID, agentA.ID])
+	agentB := &store.Agent{
+		ID: api.NewUUID(), Slug: "agent-b", Name: "Agent B",
+		Template: "claude", GroveID: grove.ID,
+		Phase: string(state.PhaseRunning), Visibility: store.VisibilityPrivate,
+		CreatedBy: agentA.ID, OwnerID: agentA.ID,
+		Ancestry: []string{userID, agentA.ID},
+	}
+	require.NoError(t, s.CreateAgent(ctx, agentB))
+
+	// Agent C: created by Agent B (ancestry = [userID, agentA.ID, agentB.ID])
+	agentC := &store.Agent{
+		ID: api.NewUUID(), Slug: "agent-c", Name: "Agent C",
+		Template: "claude", GroveID: grove.ID,
+		Phase: string(state.PhaseRunning), Visibility: store.VisibilityPrivate,
+		CreatedBy: agentB.ID, OwnerID: agentB.ID,
+		Ancestry: []string{userID, agentA.ID, agentB.ID},
+	}
+	require.NoError(t, s.CreateAgent(ctx, agentC))
+
+	// Verify ancestry is persisted and retrieved correctly
+	t.Run("GetAgent preserves ancestry", func(t *testing.T) {
+		retrieved, err := s.GetAgent(ctx, agentC.ID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{userID, agentA.ID, agentB.ID}, retrieved.Ancestry)
+	})
+
+	t.Run("GetAgentBySlug preserves ancestry", func(t *testing.T) {
+		retrieved, err := s.GetAgentBySlug(ctx, grove.ID, "agent-b")
+		require.NoError(t, err)
+		assert.Equal(t, []string{userID, agentA.ID}, retrieved.Ancestry)
+	})
+
+	t.Run("ListAgents preserves ancestry", func(t *testing.T) {
+		result, err := s.ListAgents(ctx, store.AgentFilter{GroveID: grove.ID}, store.ListOptions{})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 3)
+		for _, agent := range result.Items {
+			assert.NotEmpty(t, agent.Ancestry, "agent %s should have ancestry", agent.Slug)
+		}
+	})
+
+	t.Run("AncestorID filter - user sees all descendants", func(t *testing.T) {
+		result, err := s.ListAgents(ctx, store.AgentFilter{AncestorID: userID}, store.ListOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, 3, result.TotalCount)
+	})
+
+	t.Run("AncestorID filter - agentA sees B and C", func(t *testing.T) {
+		result, err := s.ListAgents(ctx, store.AgentFilter{AncestorID: agentA.ID}, store.ListOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, 2, result.TotalCount)
+	})
+
+	t.Run("AncestorID filter - agentB sees only C", func(t *testing.T) {
+		result, err := s.ListAgents(ctx, store.AgentFilter{AncestorID: agentB.ID}, store.ListOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.TotalCount)
+		assert.Equal(t, agentC.ID, result.Items[0].ID)
+	})
+
+	t.Run("AncestorID filter - agentC sees none", func(t *testing.T) {
+		result, err := s.ListAgents(ctx, store.AgentFilter{AncestorID: agentC.ID}, store.ListOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, 0, result.TotalCount)
+	})
+
+	t.Run("AncestorID filter - unknown user sees none", func(t *testing.T) {
+		result, err := s.ListAgents(ctx, store.AgentFilter{AncestorID: "unknown-user"}, store.ListOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, 0, result.TotalCount)
+	})
+
+	t.Run("nil ancestry persists as empty", func(t *testing.T) {
+		agentNoAnc := &store.Agent{
+			ID: api.NewUUID(), Slug: "agent-no-anc", Name: "No Ancestry",
+			Template: "claude", GroveID: grove.ID,
+			Phase: string(state.PhaseRunning), Visibility: store.VisibilityPrivate,
+		}
+		require.NoError(t, s.CreateAgent(ctx, agentNoAnc))
+		retrieved, err := s.GetAgent(ctx, agentNoAnc.ID)
+		require.NoError(t, err)
+		assert.Nil(t, retrieved.Ancestry)
+	})
+}
+
 func TestAgentStatusUpdate(t *testing.T) {
 	s := setupTestStore(t)
 	ctx := context.Background()

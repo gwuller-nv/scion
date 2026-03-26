@@ -391,6 +391,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 	// Check if the caller is an agent (sub-agent creation)
 	var createdBy string
 	var creatorName string
+	var ancestry []string
 	var notifySubscriberType, notifySubscriberID string // For --notify subscription
 	if agentIdent := GetAgentIdentityFromContext(ctx); agentIdent != nil {
 		// Agent callers must have the grove:agent:create scope
@@ -404,17 +405,22 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		createdBy = agentIdent.ID()
-		// Resolve human-readable creator name from the calling agent
+		// Resolve human-readable creator name and ancestry from the calling agent
 		if creatorAgent, err := s.store.GetAgent(ctx, agentIdent.ID()); err == nil {
 			creatorName = creatorAgent.Name
 			notifySubscriberType = store.SubscriberTypeAgent
 			notifySubscriberID = creatorAgent.Slug
+			// Build ancestry: creator's ancestry + creator's ID
+			ancestry = append(ancestry, creatorAgent.Ancestry...)
+			ancestry = append(ancestry, creatorAgent.ID)
 		}
 	} else if userIdent := GetUserIdentityFromContext(ctx); userIdent != nil {
 		createdBy = userIdent.ID()
 		creatorName = userIdent.Email()
 		notifySubscriberType = store.SubscriberTypeUser
 		notifySubscriberID = userIdent.ID()
+		// User-created agents: ancestry is [userID]
+		ancestry = []string{userIdent.ID()}
 		// Enforce policy-based authorization: user must have permission to create agents in this grove
 		decision := s.authzService.CheckAccess(ctx, userIdent, Resource{
 			Type:       "agent",
@@ -428,7 +434,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.createAgentInGrove(w, r, req, req.GroveID, createdBy, creatorName, notifySubscriberType, notifySubscriberID)
+	s.createAgentInGrove(w, r, req, req.GroveID, createdBy, creatorName, ancestry, notifySubscriberType, notifySubscriberID)
 }
 
 func (s *Server) createAgentInGrove(
@@ -438,6 +444,7 @@ func (s *Server) createAgentInGrove(
 	groveID string,
 	createdBy string,
 	creatorName string,
+	ancestry []string,
 	notifySubscriberType string,
 	notifySubscriberID string,
 ) {
@@ -592,6 +599,7 @@ func (s *Server) createAgentInGrove(
 		Visibility:      store.VisibilityPrivate,
 		CreatedBy:       createdBy,
 		OwnerID:         createdBy,
+		Ancestry:        ancestry,
 	}
 
 	// Store human-friendly slug instead of UUID for display
@@ -3647,6 +3655,7 @@ func (s *Server) createGroveAgent(w http.ResponseWriter, r *http.Request, groveI
 	// Resolve caller identity for creator tracking
 	var createdBy string
 	var creatorName string
+	var ancestry []string
 	var notifySubscriberType, notifySubscriberID string
 	if agentIdent := GetAgentIdentityFromContext(ctx); agentIdent != nil {
 		createdBy = agentIdent.ID()
@@ -3654,14 +3663,19 @@ func (s *Server) createGroveAgent(w http.ResponseWriter, r *http.Request, groveI
 			creatorName = creatorAgent.Name
 			notifySubscriberType = store.SubscriberTypeAgent
 			notifySubscriberID = creatorAgent.Slug
+			// Build ancestry: creator's ancestry + creator's ID
+			ancestry = append(ancestry, creatorAgent.Ancestry...)
+			ancestry = append(ancestry, creatorAgent.ID)
 		}
 	} else if userIdent := GetUserIdentityFromContext(ctx); userIdent != nil {
 		createdBy = userIdent.ID()
 		creatorName = userIdent.Email()
 		notifySubscriberType = store.SubscriberTypeUser
 		notifySubscriberID = userIdent.ID()
+		// User-created agents: ancestry is [userID]
+		ancestry = []string{userIdent.ID()}
 	}
-	s.createAgentInGrove(w, r, req, groveID, createdBy, creatorName, notifySubscriberType, notifySubscriberID)
+	s.createAgentInGrove(w, r, req, groveID, createdBy, creatorName, ancestry, notifySubscriberType, notifySubscriberID)
 }
 
 // getGroveAgent gets an agent by ID within a specific grove

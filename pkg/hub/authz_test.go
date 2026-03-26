@@ -575,3 +575,126 @@ func TestBrokerResource_Helper(t *testing.T) {
 	assert.Equal(t, "broker-helper-test", r.ID)
 	assert.Equal(t, "user-123", r.OwnerID)
 }
+
+// =============================================================================
+// Ancestry-Based Transitive Access Tests
+// =============================================================================
+
+func TestCanAccessAsAncestor(t *testing.T) {
+	tests := []struct {
+		name        string
+		principalID string
+		ancestry    []string
+		expected    bool
+	}{
+		{"root ancestor", "user-1", []string{"user-1"}, true},
+		{"intermediate ancestor", "agent-A", []string{"user-1", "agent-A"}, true},
+		{"not in ancestry", "user-2", []string{"user-1", "agent-A"}, false},
+		{"empty ancestry", "user-1", nil, false},
+		{"deep chain", "user-1", []string{"user-1", "agent-A", "agent-B"}, true},
+		{"deep chain middle", "agent-A", []string{"user-1", "agent-A", "agent-B"}, true},
+		{"deep chain last", "agent-B", []string{"user-1", "agent-A", "agent-B"}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resource := Resource{Type: "agent", ID: "target", Ancestry: tt.ancestry}
+			assert.Equal(t, tt.expected, canAccessAsAncestor(tt.principalID, resource))
+		})
+	}
+}
+
+func TestAuthz_AncestryAccess_UserToAgent(t *testing.T) {
+	authz, s := authzTestSetup(t)
+	ctx := context.Background()
+
+	// Create user (non-admin, non-owner — ancestry is the only access path)
+	require.NoError(t, s.CreateUser(ctx, &store.User{
+		ID: "user-ancestor", Email: "ancestor@test.com", DisplayName: "Ancestor", Role: "member", Status: "active",
+	}))
+
+	user := NewAuthenticatedUser("user-ancestor", "ancestor@test.com", "Ancestor", "member", "api")
+
+	// Resource with user in ancestry but different owner
+	resource := Resource{
+		Type:     "agent",
+		ID:       "agent-grandchild",
+		OwnerID:  "someone-else",
+		Ancestry: []string{"user-ancestor", "agent-child"},
+	}
+
+	decision := authz.CheckAccess(ctx, user, resource, ActionRead)
+	assert.True(t, decision.Allowed)
+	assert.Equal(t, "ancestor access", decision.Reason)
+}
+
+func TestAuthz_AncestryAccess_AgentToDescendant(t *testing.T) {
+	authz, s := authzTestSetup(t)
+	ctx := context.Background()
+
+	// Create grove and parent agent
+	require.NoError(t, s.CreateGrove(ctx, &store.Grove{
+		ID: "grove-ancestry-1", Name: "Ancestry Grove", Slug: "ancestry-grove-1",
+	}))
+	require.NoError(t, s.CreateAgent(ctx, &store.Agent{
+		ID: "agent-parent", Slug: "agent-parent", Name: "Parent Agent",
+		GroveID: "grove-ancestry-1", Phase: string(state.PhaseRunning),
+	}))
+
+	agent := &evaluateAgentIdentity{id: "agent-parent", groveID: "grove-ancestry-1"}
+
+	// Grandchild agent with parent in ancestry
+	resource := Resource{
+		Type:     "agent",
+		ID:       "agent-grandchild",
+		Ancestry: []string{"user-root", "agent-parent", "agent-child"},
+	}
+
+	decision := authz.CheckAccess(ctx, agent, resource, ActionRead)
+	assert.True(t, decision.Allowed)
+	assert.Equal(t, "ancestor access", decision.Reason)
+}
+
+func TestAuthz_AncestryAccess_NoAncestry(t *testing.T) {
+	authz, s := authzTestSetup(t)
+	ctx := context.Background()
+
+	require.NoError(t, s.CreateUser(ctx, &store.User{
+		ID: "user-no-ancestry", Email: "no-ancestry@test.com", DisplayName: "NoAnc", Role: "member", Status: "active",
+	}))
+
+	user := NewAuthenticatedUser("user-no-ancestry", "no-ancestry@test.com", "NoAnc", "member", "api")
+
+	// Resource without ancestry — user is not owner and has no policies
+	resource := Resource{
+		Type:    "agent",
+		ID:      "agent-no-ancestry",
+		OwnerID: "someone-else",
+	}
+
+	decision := authz.CheckAccess(ctx, user, resource, ActionRead)
+	assert.False(t, decision.Allowed)
+	assert.Equal(t, "default deny", decision.Reason)
+}
+
+func TestAuthz_AncestryAccess_NotInChain(t *testing.T) {
+	authz, s := authzTestSetup(t)
+	ctx := context.Background()
+
+	require.NoError(t, s.CreateUser(ctx, &store.User{
+		ID: "user-outsider", Email: "outsider@test.com", DisplayName: "Outsider", Role: "member", Status: "active",
+	}))
+
+	user := NewAuthenticatedUser("user-outsider", "outsider@test.com", "Outsider", "member", "api")
+
+	// Resource with ancestry that doesn't include this user
+	resource := Resource{
+		Type:     "agent",
+		ID:       "agent-other-chain",
+		OwnerID:  "someone-else",
+		Ancestry: []string{"user-other", "agent-A"},
+	}
+
+	decision := authz.CheckAccess(ctx, user, resource, ActionRead)
+	assert.False(t, decision.Allowed)
+}
