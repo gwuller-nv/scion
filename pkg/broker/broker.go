@@ -74,3 +74,14 @@ func TopicGlobalBroadcast() string {
 func TopicAllAgentMessages(groveID string) string {
 	return "scion.grove." + groveID + ".agent.*.messages"
 }
+
+// TopicUserMessages returns the topic for messages directed at a specific user in a grove.
+func TopicUserMessages(groveID, userID string) string {
+	return "scion.grove." + groveID + ".user." + userID + ".messages"
+}
+
+// TopicAllUserMessages returns a wildcard pattern matching all user message
+// topics in a grove.
+func TopicAllUserMessages(groveID string) string {
+	return "scion.grove." + groveID + ".user.*.messages"
+}

@@ -1,7 +1,7 @@
 # Messages Evolution: Built-In Inbox and Bidirectional Human-Agent Messaging
 
 ## Status
-**In Progress** | March 2026 — Phase 1 & 2 complete
+**In Progress** | March 2026 — Phases 1–4 complete
 
 ## Problem
 
@@ -508,12 +508,12 @@ The existing `agent-message-viewer` reads from Cloud Logging. With the new messa
 3. ~~Add `scion messages` command group to `cmd/messages.go`~~
 4. ~~Add `scion messages read` subcommand~~
 
-### Phase 4: Broker Integration
+### Phase 4: Broker Integration ✅ COMPLETE
 
-1. Add `grove.{groveID}.user.{userId}` topic pattern to `MessageBrokerProxy`
-2. Subscribe on behalf of SSE-connected users
-3. Publish `user.message` events for real-time delivery
-4. Add message persistence in `MessageBrokerProxy.deliverToAgent` (for broker-routed messages)
+1. ~~Add `grove.{groveID}.user.{userId}` topic pattern to `MessageBrokerProxy`~~
+2. ~~Subscribe on behalf of SSE-connected users~~
+3. ~~Publish `user.message` events for real-time delivery~~
+4. ~~Add message persistence in `MessageBrokerProxy.deliverToAgent` (for broker-routed messages)~~
 
 ### Phase 5: Web Frontend Inbox Tray
 

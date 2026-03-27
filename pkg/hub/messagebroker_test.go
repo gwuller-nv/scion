@@ -300,6 +300,162 @@ func TestMessageBrokerProxy_EnsureGroveSubscriptions(t *testing.T) {
 	}
 }
 
+func TestMessageBrokerProxy_DeliverToAgentPersistence(t *testing.T) {
+	s := newBrokerTestStore(t)
+	groveID := setupBrokerTestGrove(t, s)
+	agent := setupBrokerTestAgent(t, s, groveID, "persist-agent", "running")
+
+	events := NewChannelEventPublisher()
+	defer events.Close()
+
+	b := broker.NewInProcessBroker(slog.Default())
+	defer b.Close()
+
+	dispatcher := &brokerMockDispatcher{}
+
+	proxy := NewMessageBrokerProxy(b, s, events, func() AgentDispatcher { return dispatcher }, slog.Default())
+	proxy.Start()
+	defer proxy.Stop()
+
+	proxy.subscribeAgent(groveID, "persist-agent")
+
+	msg := messages.NewInstruction("user:alice", "agent:persist-agent", "persist this")
+	msg.SenderID = "user-alice-id"
+	msg.RecipientID = agent.ID
+	if err := proxy.PublishMessage(context.Background(), groveID, msg); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify message was dispatched
+	dispatched := dispatcher.getMessages()
+	if len(dispatched) != 1 {
+		t.Fatalf("expected 1 dispatched message, got %d", len(dispatched))
+	}
+
+	// Verify message was persisted to store
+	ctx := context.Background()
+	result, err := s.ListMessages(ctx, store.MessageFilter{AgentID: agent.ID}, store.ListOptions{})
+	if err != nil {
+		t.Fatalf("failed to list messages: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 persisted message, got %d", len(result.Items))
+	}
+	if result.Items[0].Msg != "persist this" {
+		t.Errorf("expected msg 'persist this', got %q", result.Items[0].Msg)
+	}
+	if result.Items[0].AgentID != agent.ID {
+		t.Errorf("expected agentID %q, got %q", agent.ID, result.Items[0].AgentID)
+	}
+}
+
+func TestMessageBrokerProxy_UserMessageDelivery(t *testing.T) {
+	s := newBrokerTestStore(t)
+	groveID := setupBrokerTestGrove(t, s)
+	setupBrokerTestAgent(t, s, groveID, "sending-agent", "running")
+
+	events := NewChannelEventPublisher()
+	defer events.Close()
+
+	b := broker.NewInProcessBroker(slog.Default())
+	defer b.Close()
+
+	dispatcher := &brokerMockDispatcher{}
+
+	proxy := NewMessageBrokerProxy(b, s, events, func() AgentDispatcher { return dispatcher }, slog.Default())
+	proxy.Start()
+	defer proxy.Stop()
+
+	// Subscribe to user messages for this grove (as EnsureGroveSubscriptions would do)
+	proxy.subscribeGroveUserMessages(groveID)
+
+	// Subscribe to SSE user.message events to verify delivery
+	sseEvents, unsub := events.Subscribe("user.user-bob-id.message", "grove.*.user.message")
+	defer unsub()
+
+	userID := "user-bob-id"
+	msg := messages.NewInstruction("agent:sending-agent", "user:bob", "question for you")
+	msg.SenderID = "agent-uuid-123"
+	msg.RecipientID = userID
+
+	if err := proxy.PublishUserMessage(context.Background(), groveID, userID, msg); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify message was persisted to store
+	ctx := context.Background()
+	result, err := s.ListMessages(ctx, store.MessageFilter{RecipientID: userID}, store.ListOptions{})
+	if err != nil {
+		t.Fatalf("failed to list messages: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 persisted user message, got %d", len(result.Items))
+	}
+	if result.Items[0].Msg != "question for you" {
+		t.Errorf("expected msg 'question for you', got %q", result.Items[0].Msg)
+	}
+	if result.Items[0].RecipientID != userID {
+		t.Errorf("expected recipientID %q, got %q", userID, result.Items[0].RecipientID)
+	}
+
+	// Verify SSE event was published
+	select {
+	case evt := <-sseEvents:
+		if evt.Subject != "user."+userID+".message" && !containsSuffix(evt.Subject, ".user.message") {
+			t.Errorf("unexpected SSE event subject: %q", evt.Subject)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Error("expected SSE user.message event, got none")
+	}
+}
+
+func TestMessageBrokerProxy_EnsureGroveSubscriptionsIncludesUserMessages(t *testing.T) {
+	s := newBrokerTestStore(t)
+	groveID := setupBrokerTestGrove(t, s)
+	setupBrokerTestAgent(t, s, groveID, "some-agent", "running")
+
+	events := NewChannelEventPublisher()
+	defer events.Close()
+
+	b := broker.NewInProcessBroker(slog.Default())
+	defer b.Close()
+
+	dispatcher := &brokerMockDispatcher{}
+
+	proxy := NewMessageBrokerProxy(b, s, events, func() AgentDispatcher { return dispatcher }, slog.Default())
+	proxy.Start()
+	defer proxy.Stop()
+
+	// EnsureGroveSubscriptions should also set up user message subscriptions
+	if err := proxy.EnsureGroveSubscriptions(context.Background(), groveID); err != nil {
+		t.Fatal(err)
+	}
+
+	userID := "user-carol-id"
+	msg := messages.NewInstruction("agent:some-agent", "user:carol", "auto-subscribed?")
+	msg.RecipientID = userID
+
+	if err := proxy.PublishUserMessage(context.Background(), groveID, userID, msg); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify message was persisted via the auto-subscribed user topic
+	ctx := context.Background()
+	result, err := s.ListMessages(ctx, store.MessageFilter{RecipientID: userID}, store.ListOptions{})
+	if err != nil {
+		t.Fatalf("failed to list messages: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 persisted user message after EnsureGroveSubscriptions, got %d", len(result.Items))
+	}
+}
+
 func TestRecipientSlug(t *testing.T) {
 	tests := []struct {
 		input    string

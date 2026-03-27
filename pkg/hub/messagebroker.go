@@ -18,8 +18,11 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"sync"
+	"time"
 
+	"github.com/GoogleCloudPlatform/scion/pkg/api"
 	"github.com/GoogleCloudPlatform/scion/pkg/broker"
 	"github.com/GoogleCloudPlatform/scion/pkg/messages"
 	"github.com/GoogleCloudPlatform/scion/pkg/store"
@@ -134,6 +137,14 @@ func (p *MessageBrokerProxy) PublishBroadcast(ctx context.Context, groveID strin
 	return p.broker.Publish(ctx, broker.TopicGroveBroadcast(groveID), msg)
 }
 
+// PublishUserMessage publishes a message to the user-targeted broker topic.
+// This routes an agent-to-human message through the broker so the proxy can
+// deliver it to the SSE event publisher and the message store.
+func (p *MessageBrokerProxy) PublishUserMessage(ctx context.Context, groveID, userID string, msg *messages.StructuredMessage) error {
+	topic := broker.TopicUserMessages(groveID, userID)
+	return p.broker.Publish(ctx, topic, msg)
+}
+
 // EnsureGroveSubscriptions sets up broker subscriptions for all running agents
 // in the specified grove. Called when a grove becomes active or a broker reconnects.
 func (p *MessageBrokerProxy) EnsureGroveSubscriptions(ctx context.Context, groveID string) error {
@@ -149,8 +160,9 @@ func (p *MessageBrokerProxy) EnsureGroveSubscriptions(ctx context.Context, grove
 		p.subscribeAgent(groveID, agent.Slug)
 	}
 
-	// Also subscribe to grove broadcast
+	// Also subscribe to grove broadcast and user messages
 	p.subscribeGroveBroadcast(groveID)
+	p.subscribeGroveUserMessages(groveID)
 
 	return nil
 }
@@ -166,6 +178,7 @@ func (p *MessageBrokerProxy) handleLifecycleEvent(evt Event) {
 		}
 		p.subscribeAgent(created.GroveID, created.Slug)
 		p.subscribeGroveBroadcast(created.GroveID)
+		p.subscribeGroveUserMessages(created.GroveID)
 
 	case containsSuffix(evt.Subject, ".agent.status"):
 		var status AgentStatusEvent
@@ -232,6 +245,72 @@ func (p *MessageBrokerProxy) subscribeGroveBroadcast(groveID string) {
 	p.log.Debug("Subscribed to grove broadcast", "topic", topic)
 }
 
+// subscribeGroveUserMessages creates a broker subscription for all user-targeted
+// messages in a grove. When a message arrives, it is persisted to the message
+// store and published as a user.message SSE event for connected browser clients.
+// The subscription uses a wildcard to cover all users in the grove.
+func (p *MessageBrokerProxy) subscribeGroveUserMessages(groveID string) {
+	topic := broker.TopicAllUserMessages(groveID)
+
+	sub, err := p.broker.Subscribe(topic, func(ctx context.Context, t string, msg *messages.StructuredMessage) {
+		p.deliverToUser(ctx, groveID, t, msg)
+	})
+	if err != nil {
+		p.log.Error("Failed to subscribe for grove user messages",
+			"groveID", groveID, "error", err)
+		return
+	}
+
+	p.mu.Lock()
+	p.subscriptions[groveID] = append(p.subscriptions[groveID], sub)
+	p.mu.Unlock()
+
+	p.log.Debug("Subscribed to grove user messages", "topic", topic)
+}
+
+// deliverToUser handles a broker message addressed to a human user by persisting
+// it to the message store and publishing a user.message SSE event.
+func (p *MessageBrokerProxy) deliverToUser(ctx context.Context, groveID, topic string, msg *messages.StructuredMessage) {
+	// Persist to message store (write-through; non-fatal if store fails).
+	// AgentID is the sender's agent ID when an agent sends to a user.
+	agentID := ""
+	if strings.HasPrefix(msg.Sender, "agent:") {
+		agentID = msg.SenderID
+	}
+
+	storeMsg := &store.Message{
+		ID:          api.NewUUID(),
+		GroveID:     groveID,
+		Sender:      msg.Sender,
+		SenderID:    msg.SenderID,
+		Recipient:   msg.Recipient,
+		RecipientID: msg.RecipientID,
+		Msg:         msg.Msg,
+		Type:        msg.Type,
+		Urgent:      msg.Urgent,
+		Broadcasted: msg.Broadcasted,
+		AgentID:     agentID,
+		CreatedAt:   time.Now(),
+	}
+	if err := p.store.CreateMessage(ctx, storeMsg); err != nil {
+		p.log.Error("Failed to persist user message from broker", "topic", topic, "error", err)
+	}
+
+	// Publish SSE event so connected browser clients receive real-time inbox updates.
+	p.events.PublishUserMessage(ctx, storeMsg)
+
+	// Log to dedicated message audit log
+	if p.messageLog != nil {
+		logAttrs := []any{
+			"grove_id", groveID,
+			"topic", topic,
+			"source", "broker",
+		}
+		logAttrs = append(logAttrs, msg.LogAttrs()...)
+		p.messageLog.Info("user message delivered via broker", logAttrs...)
+	}
+}
+
 // subscribeGlobalBroadcast creates a broker subscription for global broadcasts.
 func (p *MessageBrokerProxy) subscribeGlobalBroadcast() {
 	topic := broker.TopicGlobalBroadcast()
@@ -271,6 +350,25 @@ func (p *MessageBrokerProxy) deliverToAgent(ctx context.Context, groveID, agentS
 		p.log.Error("Failed to dispatch broker message to agent",
 			"agentSlug", agentSlug, "error", err)
 		return
+	}
+
+	// Persist to message store (write-through; non-fatal if store fails).
+	storeMsg := &store.Message{
+		ID:          api.NewUUID(),
+		GroveID:     groveID,
+		Sender:      msg.Sender,
+		SenderID:    msg.SenderID,
+		Recipient:   msg.Recipient,
+		RecipientID: msg.RecipientID,
+		Msg:         msg.Msg,
+		Type:        msg.Type,
+		Urgent:      msg.Urgent,
+		Broadcasted: msg.Broadcasted,
+		AgentID:     agent.ID,
+		CreatedAt:   time.Now(),
+	}
+	if err := p.store.CreateMessage(ctx, storeMsg); err != nil {
+		p.log.Error("Failed to persist broker message to store", "agentSlug", agentSlug, "error", err)
 	}
 
 	// Log to dedicated message audit log
