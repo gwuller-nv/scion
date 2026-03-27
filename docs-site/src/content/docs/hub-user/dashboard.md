@@ -33,7 +33,7 @@ Detailed view for individual agents, featuring a high-density tabbed layout and 
 - **Messages Tab**: A dedicated tab for viewing structured messages sent to and from the agent.
 - **Configuration Tab**: Dedicated tab for viewing the applied configuration of the agent, featuring a new telemetry configuration card.
 - **Debug Panel**: A full-height panel providing a real-time stream of SSE events and internal state transitions for advanced troubleshooting and observability.
-- **Terminal**: Interactive terminal access to the agent's workspace, featuring built-in Tmux support with a mouse toggle (`C-b m`), window switching controls (agent/shell), and a dedicated terminal toolbar.
+- **Terminal**: Interactive terminal access to the agent's workspace, featuring built-in Tmux support with modifier-based text selection (`Shift`-drag on Linux/Windows, `Option`-drag on macOS), window switching controls (agent/shell), and a dedicated terminal toolbar with an optional mouse toggle.
 - **Workspace Content Previews**: Content preview capabilities for workspace files directly within the UI, allowing you to quickly inspect agent output and project data.
 - **Lifecycle Control**: Start, stop, restart, or delete agents from the UI. Includes bulk operations like the "Stop All" button for efficient bulk shutdown of all agents within a grove.
 

@@ -31,8 +31,9 @@ When you are attached to an agent, you interact with `tmux` using a **prefix key
 The Scion Web Dashboard provides a built-in terminal interface for agents that fully supports Tmux. This Web Terminal includes:
 - **Toolbar Integration**: Visual buttons to easily send common Tmux sequences like detach, split panes, or enter scroll mode.
 - **Window Toggles**: Toolbar controls for managing tmux windows, allowing you to seamlessly switch between the agent session and a shell window. These controls use direct tmux key bindings for reliability.
-- **Mouse & Clipboard Toggle**: Quickly enable or disable Tmux mouse mode and clipboard behavior directly within the browser. Mouse mode is enabled by default for intuitive text selection and scrolling.
+- **Mouse & Text Selection Together**: Tmux mouse mode stays enabled for scroll wheel and pane interactions. To select text in the browser without disabling mouse mode, hold `Shift` while dragging on Linux/Windows or `Option` while dragging on macOS.
 - **Persistent Copy-Paste**: Improved clipboard handling ensures reliable copy and paste interactions, including proper mouse-drag text selection within the web-based Tmux session.
+- **Optional Mouse Toggle**: The toolbar still exposes explicit mouse on/off controls if you want plain browser drag selection without a modifier.
 
 ## Customizing Your Session
 

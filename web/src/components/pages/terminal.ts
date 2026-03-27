@@ -430,6 +430,9 @@ export class ScionPageTerminal extends LitElement {
       fontSize: 14,
       cursorBlink: true,
       cursorStyle: 'block',
+      // Keep tmux mouse mode enabled for wheel/pane interactions while still
+      // allowing browser-native text selection with Option-drag on macOS.
+      macOptionClickForcesSelection: true,
       allowProposedApi: true,
     });
 
@@ -756,16 +759,19 @@ export class ScionPageTerminal extends LitElement {
         </a>
         <div class="separator"></div>
         <span class="agent-name">${this.agentName || this.agentId}</span>
-        <div class="toggle-group" title="Mouse mode: terminal mouse events&#10;Clipboard mode: browser text selection">
+        <div
+          class="toggle-group"
+          title="Tmux mouse mode stays enabled for scrolling and pane interactions. Hold Shift while dragging to select text on Linux/Windows, or Option on macOS. Use Mouse Off only if you want plain drag selection without a modifier."
+        >
           <button
             class=${this.mouseEnabled ? 'active' : ''}
-            title="Mouse mode (terminal mouse events)"
+            title="Mouse on: scroll wheel and tmux mouse interactions stay enabled"
             @click=${() => this.setMouseMode(true)}
             ?disabled=${!this.connected}
           >${this.renderMouseIcon()}</button>
           <button
             class=${!this.mouseEnabled ? 'active' : ''}
-            title="Clipboard mode (browser text selection)"
+            title="Mouse off: fallback for plain browser drag selection without Shift/Option"
             @click=${() => this.setMouseMode(false)}
             ?disabled=${!this.connected}
           >${this.renderClipboardIcon()}</button>
