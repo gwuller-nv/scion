@@ -203,6 +203,8 @@ func parseGitHubURL(uri string) (*GitHubURLParts, error) {
 	// Patterns to match:
 	// https://github.com/owner/repo/tree/branch/path/to/folder
 	// https://github.com/owner/repo/tree/branch (repo root at branch)
+	// https://github.com/owner/repo/path/to/folder (defaults to main branch)
+	// https://github.com/owner/repo (repo root, defaults to main branch)
 
 	u, err := url.Parse(uri)
 	if err != nil {
@@ -234,8 +236,11 @@ func parseGitHubURL(uri string) (*GitHubURLParts, error) {
 	} else if len(pathParts) == 2 {
 		// Just owner/repo, default to main branch
 		result.Branch = "main"
-	} else {
-		return nil, fmt.Errorf("unsupported GitHub URL format: %s", uri)
+	} else if len(pathParts) > 2 {
+		// Direct path without /tree/branch/ — default to main branch
+		// e.g., https://github.com/org/repo/some/path/.scion/templates
+		result.Branch = "main"
+		result.Path = strings.Join(pathParts[2:], "/")
 	}
 
 	return result, nil

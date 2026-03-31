@@ -106,6 +106,22 @@ func TestParseGitHubURL(t *testing.T) {
 			wantPath:   "",
 		},
 		{
+			name:       "direct path without tree defaults to main",
+			uri:        "https://github.com/org/repo/some/path/.scion/templates",
+			wantOwner:  "org",
+			wantRepo:   "repo",
+			wantBranch: "main",
+			wantPath:   "some/path/.scion/templates",
+		},
+		{
+			name:       "direct path single segment",
+			uri:        "https://github.com/user/repo/.claude/agents",
+			wantOwner:  "user",
+			wantRepo:   "repo",
+			wantBranch: "main",
+			wantPath:   ".claude/agents",
+		},
+		{
 			name:        "non-github URL",
 			uri:         "https://gitlab.com/user/repo",
 			expectError: true,

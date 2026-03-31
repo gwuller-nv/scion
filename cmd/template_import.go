@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,6 +36,7 @@ Source can be:
   - A single .md agent definition file
   - A directory containing agent definition files
   - A project root (auto-discovers .claude/agents/ and .gemini/agents/)
+  - A GitHub URL pointing to a repository or subdirectory
 
 The harness type (claude/gemini) is auto-detected from file path and content.
 Use --harness to override detection.
@@ -48,6 +50,12 @@ Examples:
 
   # Auto-detect and import all agents from project root
   scion templates import --all .
+
+  # Import from a GitHub repository subdirectory
+  scion templates import --all https://github.com/org/repo/path/to/.scion/templates
+
+  # Import from a GitHub URL with explicit branch
+  scion templates import --all https://github.com/org/repo/tree/main/.claude/agents
 
   # Import with explicit harness and custom name
   scion templates import --harness gemini --name my-auditor agents/security.md
@@ -65,6 +73,23 @@ func runTemplateImport(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	all, _ := cmd.Flags().GetBool("all")
+
+	// Check if source is a remote URI (GitHub URL, archive, rclone)
+	var remoteCachePath string
+	if config.IsRemoteURI(source) {
+		if err := config.ValidateRemoteURI(source); err != nil {
+			return fmt.Errorf("invalid remote source: %w", err)
+		}
+
+		fmt.Printf("Fetching remote source: %s\n", source)
+		cachePath, err := config.FetchRemoteTemplate(context.Background(), source)
+		if err != nil {
+			return fmt.Errorf("failed to fetch remote source: %w", err)
+		}
+		remoteCachePath = cachePath
+		defer os.RemoveAll(remoteCachePath)
+		source = cachePath
+	}
 
 	// Resolve source path
 	absSource, err := filepath.Abs(source)
