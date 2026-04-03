@@ -386,11 +386,11 @@ Renders markdown as sanitized HTML.
 - [x] Gate on `update` capability
 - [x] File size limit enforcement (1MB) with graceful fallback to download
 
-### Phase 3: Markdown Preview
+### Phase 3: Markdown Preview ✅
 
-- [ ] Add `scion-markdown-preview` component with `marked` + `DOMPurify`
-- [ ] Add preview toggle button to editor toolbar for `.md` files
-- [ ] Change eye icon behavior for `.md` files to open inline preview
+- [x] Add `scion-markdown-preview` component with `marked` + `DOMPurify`
+- [x] Add preview toggle button to editor toolbar for `.md` files
+- [x] Change eye icon behavior for `.md` files to open inline preview
 
 ### Phase 4: Polish & Extensions
 
