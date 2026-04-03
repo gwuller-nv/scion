@@ -40,6 +40,9 @@ type GCPServiceAccountService interface {
 
 	// Verify triggers verification that the Hub can impersonate the SA.
 	Verify(ctx context.Context, id string) (*GCPServiceAccount, error)
+
+	// Mint creates a new GCP service account in the Hub's GCP project.
+	Mint(ctx context.Context, req *MintGCPServiceAccountRequest) (*GCPServiceAccount, error)
 }
 
 // GCPServiceAccount represents a registered GCP service account.
@@ -57,6 +60,8 @@ type GCPServiceAccount struct {
 	VerificationError  string    `json:"verificationError,omitempty"`
 	CreatedBy          string    `json:"created_by"`
 	CreatedAt          time.Time `json:"created_at"`
+	Managed            bool      `json:"managed"`
+	ManagedBy          string    `json:"managed_by,omitempty"`
 }
 
 // CreateGCPServiceAccountRequest is the request for registering a GCP SA.
@@ -65,6 +70,13 @@ type CreateGCPServiceAccountRequest struct {
 	ProjectID   string   `json:"project_id"`
 	DisplayName string   `json:"display_name,omitempty"`
 	Scopes      []string `json:"default_scopes,omitempty"`
+}
+
+// MintGCPServiceAccountRequest is the request for minting a new GCP SA.
+type MintGCPServiceAccountRequest struct {
+	AccountID   string `json:"account_id,omitempty"`
+	DisplayName string `json:"display_name,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // gcpServiceAccountService is the implementation of GCPServiceAccountService.
@@ -119,6 +131,15 @@ func (s *gcpServiceAccountService) Delete(ctx context.Context, id string) error 
 func (s *gcpServiceAccountService) Verify(ctx context.Context, id string) (*GCPServiceAccount, error) {
 	path := fmt.Sprintf("%s/%s/verify", s.basePath(), id)
 	resp, err := s.c.transport.Post(ctx, path, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return apiclient.DecodeResponse[GCPServiceAccount](resp)
+}
+
+func (s *gcpServiceAccountService) Mint(ctx context.Context, req *MintGCPServiceAccountRequest) (*GCPServiceAccount, error) {
+	path := fmt.Sprintf("%s/mint", s.basePath())
+	resp, err := s.c.transport.Post(ctx, path, req, nil)
 	if err != nil {
 		return nil, err
 	}

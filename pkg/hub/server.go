@@ -125,6 +125,9 @@ type ServerConfig struct {
 	SecretBackend secret.SecretBackend
 	// MaintenanceConfig holds configuration for routine maintenance operations.
 	MaintenanceConfig MaintenanceConfig
+	// GCPProjectID is the GCP project ID used for minting service accounts.
+	// If empty, auto-detected from the metadata server when running on GCE/Cloud Run.
+	GCPProjectID string
 }
 
 // MaintenanceConfig holds configuration for routine maintenance operation executors.
@@ -482,6 +485,9 @@ type Server struct {
 
 	// GCP token generator for agent identity (nil = GCP identity disabled)
 	gcpTokenGenerator GCPTokenGenerator
+
+	// GCP IAM admin for minting service accounts (nil = minting disabled)
+	gcpIAMAdmin GCPServiceAccountAdmin
 
 	// GCP token rate limiter (nil = no rate limiting)
 	gcpTokenRateLimiter *GCPTokenRateLimiter
@@ -1085,6 +1091,20 @@ func (s *Server) SetGCPTokenGenerator(g GCPTokenGenerator) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gcpTokenGenerator = g
+}
+
+// SetGCPServiceAccountAdmin sets the GCP IAM admin client for minting service accounts.
+func (s *Server) SetGCPServiceAccountAdmin(a GCPServiceAccountAdmin) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gcpIAMAdmin = a
+}
+
+// SetGCPProjectID sets the GCP project ID used for minting service accounts.
+func (s *Server) SetGCPProjectID(projectID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.config.GCPProjectID = projectID
 }
 
 func (s *Server) SetEventPublisher(ep EventPublisher) {

@@ -959,6 +959,8 @@ type GCPServiceAccount struct {
 	VerificationError  string    `json:"verificationError,omitempty"`  // Error message when verification failed
 	CreatedBy          string    `json:"created_by"`                   // User who registered it
 	CreatedAt          time.Time `json:"created_at"`
+	Managed            bool      `json:"managed"`              // true = created by Hub, false = BYOSA
+	ManagedBy          string    `json:"managed_by,omitempty"` // Hub instance ID that minted this SA
 }
 
 // GCPIdentityConfig holds the GCP identity assignment for an agent.

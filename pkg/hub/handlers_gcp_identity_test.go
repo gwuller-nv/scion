@@ -17,6 +17,7 @@
 package hub
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -159,4 +160,148 @@ func TestCreateGCPServiceAccount_Duplicate(t *testing.T) {
 	var errResp ErrorResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&errResp))
 	assert.Equal(t, ErrCodeConflict, errResp.Error.Code)
+}
+
+// mockGCPServiceAccountAdmin is a test implementation of GCPServiceAccountAdmin.
+type mockGCPServiceAccountAdmin struct {
+	createErr   error
+	policyErr   error
+	createdSAs  []string // track created account IDs
+	lastEmail   string
+	lastProject string
+}
+
+func (m *mockGCPServiceAccountAdmin) CreateServiceAccount(_ context.Context, projectID, accountID, _, _ string) (string, string, error) {
+	if m.createErr != nil {
+		return "", "", m.createErr
+	}
+	email := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", accountID, projectID)
+	m.createdSAs = append(m.createdSAs, accountID)
+	m.lastEmail = email
+	m.lastProject = projectID
+	return email, "unique-id-123", nil
+}
+
+func (m *mockGCPServiceAccountAdmin) SetIAMPolicy(_ context.Context, saEmail, _, _ string) error {
+	return m.policyErr
+}
+
+func testServerWithMinting(t *testing.T) (*Server, store.Store, *mockGCPServiceAccountAdmin) {
+	t.Helper()
+	srv, s := testServer(t)
+	mock := &mockGCPServiceAccountAdmin{}
+	srv.SetGCPServiceAccountAdmin(mock)
+	srv.SetGCPProjectID("test-hub-project")
+
+	// Set a mock token generator so the hub SA email is available
+	srv.SetGCPTokenGenerator(&mockGCPTokenGenerator{email: "hub-sa@test-hub-project.iam.gserviceaccount.com"})
+
+	return srv, s, mock
+}
+
+// mockGCPTokenGenerator implements GCPTokenGenerator for testing.
+type mockGCPTokenGenerator struct {
+	email string
+}
+
+func (m *mockGCPTokenGenerator) GenerateAccessToken(_ context.Context, _ string, _ []string) (*GCPAccessToken, error) {
+	return &GCPAccessToken{AccessToken: "test-token", ExpiresIn: 3600, TokenType: "Bearer"}, nil
+}
+
+func (m *mockGCPTokenGenerator) GenerateIDToken(_ context.Context, _ string, _ string) (*GCPIDToken, error) {
+	return &GCPIDToken{Token: "test-id-token"}, nil
+}
+
+func (m *mockGCPTokenGenerator) VerifyImpersonation(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockGCPTokenGenerator) ServiceAccountEmail() string {
+	return m.email
+}
+
+func TestMintGCPServiceAccount_Success(t *testing.T) {
+	srv, _, mock := testServerWithMinting(t)
+	groveID := createTestGroveForSA(t, srv, nil)
+
+	rec := doRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/gcp-service-accounts/mint", groveID),
+		map[string]string{})
+	require.Equal(t, http.StatusCreated, rec.Code, "body: %s", rec.Body.String())
+
+	var sa store.GCPServiceAccount
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&sa))
+	assert.True(t, sa.Managed)
+	assert.True(t, sa.Verified)
+	assert.Contains(t, sa.Email, "@test-hub-project.iam.gserviceaccount.com")
+	assert.Contains(t, sa.Email, "scion-")
+	assert.Equal(t, "test-hub-project", sa.ProjectID)
+	assert.Len(t, mock.createdSAs, 1)
+}
+
+func TestMintGCPServiceAccount_CustomAccountID(t *testing.T) {
+	srv, _, mock := testServerWithMinting(t)
+	groveID := createTestGroveForSA(t, srv, nil)
+
+	rec := doRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/gcp-service-accounts/mint", groveID),
+		map[string]string{
+			"account_id":   "my-pipeline",
+			"display_name": "My Pipeline SA",
+		})
+	require.Equal(t, http.StatusCreated, rec.Code, "body: %s", rec.Body.String())
+
+	var sa store.GCPServiceAccount
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&sa))
+	assert.True(t, sa.Managed)
+	assert.Equal(t, "scion-my-pipeline@test-hub-project.iam.gserviceaccount.com", sa.Email)
+	assert.Equal(t, "My Pipeline SA", sa.DisplayName)
+	assert.Equal(t, "scion-my-pipeline", mock.createdSAs[0])
+}
+
+func TestMintGCPServiceAccount_AccountIDTooLong(t *testing.T) {
+	srv, _, _ := testServerWithMinting(t)
+	groveID := createTestGroveForSA(t, srv, nil)
+
+	rec := doRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/gcp-service-accounts/mint", groveID),
+		map[string]string{
+			"account_id": "this-is-a-very-long-account-id-that-exceeds",
+		})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var errResp ErrorResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&errResp))
+	assert.Equal(t, ErrCodeValidationError, errResp.Error.Code)
+}
+
+func TestMintGCPServiceAccount_NotConfigured(t *testing.T) {
+	srv, _ := testServer(t) // No minting configured
+	groveID := createTestGroveForSA(t, srv, nil)
+
+	rec := doRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/gcp-service-accounts/mint", groveID),
+		map[string]string{})
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func TestMintGCPServiceAccount_GroveNotFound(t *testing.T) {
+	srv, _, _ := testServerWithMinting(t)
+
+	rec := doRequest(t, srv, http.MethodPost,
+		"/api/v1/groves/nonexistent-grove-id/gcp-service-accounts/mint",
+		map[string]string{})
+	require.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestMintGCPServiceAccount_NoAuth(t *testing.T) {
+	srv, _, _ := testServerWithMinting(t)
+	groveID := createTestGroveForSA(t, srv, nil)
+
+	rec := doRequestNoAuth(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/gcp-service-accounts/mint", groveID),
+		map[string]string{})
+	// Should be forbidden without auth
+	assert.True(t, rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden,
+		"expected 401 or 403, got %d", rec.Code)
 }

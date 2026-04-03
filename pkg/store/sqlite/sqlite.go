@@ -119,6 +119,7 @@ func (s *SQLiteStore) Migrate(ctx context.Context) error {
 		migrationV41,
 		migrationV42,
 		migrationV43,
+		migrationV44,
 	}
 
 	// Create migrations table if not exists
@@ -1074,6 +1075,13 @@ UPDATE secrets SET secret_type = 'internal'
 WHERE key IN ('agent_signing_key', 'user_signing_key')
   AND scope = 'hub'
   AND secret_type != 'internal';
+`
+
+// Migration V44: Add managed and managed_by columns to gcp_service_accounts table
+// for hub-minted service accounts.
+const migrationV44 = `
+ALTER TABLE gcp_service_accounts ADD COLUMN managed INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE gcp_service_accounts ADD COLUMN managed_by TEXT NOT NULL DEFAULT '';
 `
 
 // Helper functions for JSON marshaling/unmarshaling

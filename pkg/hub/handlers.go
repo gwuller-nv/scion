@@ -4329,6 +4329,23 @@ func (s *Server) deleteGrove(w http.ResponseWriter, r *http.Request, id string) 
 		slog.Info("deleted grove secrets", "grove_id", id, "count", n)
 	}
 
+	// Warn about retained managed GCP service accounts (best-effort).
+	// Managed SAs are NOT deleted from GCP — only unlinked from the grove.
+	s.warnManagedGCPServiceAccounts(ctx, id)
+
+	// Clean up grove-scoped GCP service account registrations (best-effort).
+	if sas, err := s.store.ListGCPServiceAccounts(ctx, store.GCPServiceAccountFilter{
+		Scope:   store.ScopeGrove,
+		ScopeID: id,
+	}); err == nil {
+		for _, sa := range sas {
+			if delErr := s.store.DeleteGCPServiceAccount(ctx, sa.ID); delErr != nil {
+				slog.Warn("failed to delete grove GCP service account registration",
+					"grove_id", id, "sa_id", sa.ID, "email", sa.Email, "error", delErr.Error())
+			}
+		}
+	}
+
 	// Clean up grove-scoped templates (best-effort), including storage files.
 	s.deleteGroveTemplates(ctx, id)
 
@@ -4434,6 +4451,26 @@ func (s *Server) deleteGroveTemplates(ctx context.Context, groveID string) {
 		slog.Warn("failed to delete grove templates", "grove_id", groveID, "error", err)
 	} else if n > 0 {
 		slog.Info("deleted grove templates", "grove_id", groveID, "count", n)
+	}
+}
+
+// warnManagedGCPServiceAccounts logs a warning for any hub-minted GCP service
+// accounts that will be retained in GCP when a grove is deleted.
+func (s *Server) warnManagedGCPServiceAccounts(ctx context.Context, groveID string) {
+	managed := true
+	sas, err := s.store.ListGCPServiceAccounts(ctx, store.GCPServiceAccountFilter{
+		Scope:   store.ScopeGrove,
+		ScopeID: groveID,
+		Managed: &managed,
+	})
+	if err != nil {
+		slog.Warn("failed to list managed GCP SAs for grove deletion warning",
+			"grove_id", groveID, "error", err)
+		return
+	}
+	for _, sa := range sas {
+		slog.Warn("grove deletion: managed GCP service account retained in GCP — manual cleanup may be required",
+			"grove_id", groveID, "sa_email", sa.Email, "sa_id", sa.ID, "project_id", sa.ProjectID)
 	}
 }
 
