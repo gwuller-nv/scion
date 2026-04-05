@@ -22,17 +22,14 @@ Today, there is no way for a user to express: *"This secret should be available 
 
 1. **API keys for sub-agents**: A user stores `ANTHROPIC_API_KEY` at user scope. They create a lead agent that spawns worker sub-agents. The workers need the same API key but don't receive it because they were created by an agent, not the user.
 
-2. **Shared service credentials**: A grove has a `DATABASE_URL` secret. Sub-agents spawned by other agents within the grove should inherit access to it without requiring manual per-agent configuration.
-
-3. **Scoped tool tokens**: A user sets a GitHub PAT as a secret. They want their agents and any sub-agents to be able to use it for code operations, but not agents created by other users.
+2. **Scoped tool tokens**: A user sets a GitHub PAT as a user-scoped secret. They want their agents and any sub-agents to be able to use it for code operations, but not agents created by other users.
 
 ### Goals
 
-1. Allow users to opt-in individual secrets/env vars for progeny access at creation or edit time.
+1. Allow users to opt-in individual user-scoped secrets for progeny access at creation or edit time.
 2. Ensure progeny access flows through the existing policy engine — no special-case bypass logic.
 3. Include ancestry data in agent token claims so the secret resolution pipeline can verify lineage.
-4. Support both `user`-scoped and `grove`-scoped secrets.
-5. Maintain the principle of least privilege — progeny access is opt-in, not default.
+4. Maintain the principle of least privilege — progeny access is opt-in, not default.
 
 ### Non-Goals
 
@@ -89,7 +86,9 @@ The policy engine (`AuthzService.CheckAccess`) already supports ancestry-based a
 
 ### 3.1 New Secret Metadata: `AllowProgeny`
 
-Add a boolean field `AllowProgeny` to the secret and env var models to let users opt-in to progeny access.
+Add a boolean field `AllowProgeny` to the secret model to let users opt-in to progeny access on user-scoped secrets.
+
+> **Scope restriction**: `allowProgeny` is only valid on `user`-scoped secrets. Grove-scoped and broker-scoped secrets are already available to all agents in that scope through normal resolution — progeny agents in the same grove receive them automatically. The API should reject `allowProgeny: true` on non-user-scoped secrets with a 400 error.
 
 #### Secret Model Changes
 
@@ -97,12 +96,12 @@ Add a boolean field `AllowProgeny` to the secret and env var models to let users
 ```go
 type SecretMeta struct {
     // ... existing fields ...
-    AllowProgeny bool `json:"allowProgeny,omitempty"` // Allow creator's progeny agents to access
+    AllowProgeny bool `json:"allowProgeny,omitempty"` // Allow creator's progeny agents to access (user scope only)
 }
 
 type SetSecretInput struct {
     // ... existing fields ...
-    AllowProgeny bool // Allow creator's progeny agents to access
+    AllowProgeny bool // Allow creator's progeny agents to access (user scope only)
 }
 ```
 
@@ -110,12 +109,7 @@ type SetSecretInput struct {
 ```go
 type Secret struct {
     // ... existing fields ...
-    AllowProgeny bool `json:"allowProgeny,omitempty"` // Progeny access opt-in
-}
-
-type EnvVar struct {
-    // ... existing fields ...
-    AllowProgeny bool `json:"allowProgeny,omitempty"` // Progeny access opt-in
+    AllowProgeny bool `json:"allowProgeny,omitempty"` // Progeny access opt-in (user scope only)
 }
 ```
 
@@ -133,23 +127,13 @@ type EnvVar struct {
 }
 ```
 
-**`PUT /api/v1/env/{key}`** — Same addition:
-
-```json
-{
-  "key": "MY_TOKEN",
-  "value": "...",
-  "scope": "grove",
-  "scopeId": "grove-456",
-  "allowProgeny": true
-}
-```
+Setting `allowProgeny: true` with `scope` other than `"user"` returns a `400 Bad Request`.
 
 **`GET` responses** — Include `allowProgeny` in metadata responses so the UI and CLI can display and edit the flag.
 
 #### Database Schema
 
-Add `allow_progeny BOOLEAN NOT NULL DEFAULT FALSE` column to both the `secrets` and `env_vars` tables (Ent schema or SQLite migration).
+Add `allow_progeny BOOLEAN NOT NULL DEFAULT FALSE` column to the `secrets` table (Ent schema or SQLite migration).
 
 ### 3.2 Ancestry Claims in Agent Tokens
 
@@ -204,7 +188,7 @@ When a secret is created or updated with `allowProgeny: true`, the system genera
 // Conceptual policy — may be materialized in the DB or evaluated inline
 Policy{
     Name:         "progeny-secret-access:<secret-id>",
-    ScopeType:    secret.Scope,           // "user" or "grove"
+    ScopeType:    "user",                  // allowProgeny is user-scope only
     ScopeID:      secret.ScopeID,
     ResourceType: "secret",
     ResourceID:   secret.ID,
@@ -255,7 +239,8 @@ Two implementation strategies:
 | Update: set `allowProgeny: true` | Create implicit policy (if not exists) |
 | Update: set `allowProgeny: false` | Delete implicit policy |
 | Delete secret | Delete implicit policy |
-| Update `createdBy` (ownership transfer) | Update policy's `DelegatedFrom.PrincipalID` |
+
+> **Ownership transfer**: The `createdBy` field is immutable — it records the historical creator. If a secret's creator is deactivated, the `allowProgeny` flag becomes inert (no new agents will have that user in their ancestry). The admin or new owner should toggle `allowProgeny` off and re-create the secret under their own identity if progeny access is still needed.
 
 ### 3.4 Secret Resolution Changes
 
@@ -273,10 +258,11 @@ Current:
 Updated (when caller is an agent with ancestry):
   1. Query secrets WHERE scope=grove AND scopeID=groveID  (unchanged)
   2. Query secrets WHERE scope=runtime_broker AND scopeID=brokerID  (unchanged)
-  3. Query secrets WHERE allowProgeny=true AND createdBy IN agent.Ancestry
+  3. Query user-scoped progeny secrets:
+     WHERE scope=user AND allowProgeny=true AND createdBy IN agent.Ancestry
      → For each candidate, verify access via policy engine
-  4. Merge all results (scope priority still applies; progeny secrets
-     have the same priority as their original scope)
+  4. Merge all results (grove/broker secrets override user-scoped
+     progeny secrets with the same key, per normal precedence)
 ```
 
 **New `Resolve` signature** (adds optional ancestry context):
@@ -295,14 +281,9 @@ type ResolveOpts struct {
 func (b *Backend) Resolve(ctx context.Context, userID, groveID, brokerID string, opts *ResolveOpts) ([]SecretWithValue, error)
 ```
 
-### 3.5 Env Var Resolution Changes
+### 3.5 Env Vars
 
-Environment variables follow the same pattern as secrets. The `resolveEnvSecretAccess()` function in `pkg/hub/handlers.go` should apply the same progeny logic when resolving env vars for dispatch:
-
-1. Standard scope-based resolution (unchanged).
-2. If the requesting agent has ancestry, query env vars with `allowProgeny=true` whose `createdBy` is in the ancestry chain.
-3. Verify access via policy engine.
-4. Merge into the result set.
+Environment variables do not need `allowProgeny` support. Env vars are non-sensitive configuration and are already resolved by scope (user, grove, broker). Grove-scoped env vars flow to all agents in the grove, including progeny. User-scoped env vars that are promoted to secrets (via `secret: true`) follow the secret progeny path described above.
 
 ---
 
@@ -314,8 +295,6 @@ Environment variables follow the same pattern as secrets. The `resolveEnvSecretA
 ```bash
 scion secret set ANTHROPIC_API_KEY --scope user --allow-progeny
 # Enter secret value: ****
-
-scion env set LOG_LEVEL=debug --scope grove --allow-progeny
 ```
 
 **Viewing progeny flag:**
@@ -369,9 +348,17 @@ Because progeny access is implemented via the policy engine, explicit `deny` pol
 
 All progeny secret access decisions flow through `CheckAccess()`, which emits authorization decision logs. The materialized policy approach ensures that progeny grants appear in policy listings and can be reviewed.
 
-### 5.7 Token Revocation
+### 5.7 Injection Mode
 
-If a parent agent is stopped or deleted, its progeny agents retain their own tokens with their own ancestry. This is by design — ancestry is a historical fact, not a live permission. To revoke progeny access, the user should set `allowProgeny: false` on the secret, which deletes the implicit policy.
+Secrets with `injectionMode: "as_needed"` retain that behavior when accessed via progeny. The injection mode is a property of the secret itself, not the access path. No special handling is needed.
+
+### 5.8 Policy Evaluated at Dispatch Only
+
+Progeny secret access policies are evaluated at agent dispatch time, when secrets are resolved and injected into the container. Once a secret is injected into a running agent's environment, toggling `allowProgeny: false` does **not** revoke it from already-running agents — it only affects future dispatches. This is consistent with how all secrets behave today: rotating or deleting a secret does not affect running containers.
+
+### 5.9 System-Managed Policy Visibility
+
+Materialized progeny policies are labeled `scion.dev/managed-by: progeny-secret-access`. When policy listing is exposed in the CLI or web UI, these should be displayed alongside user-created policies but visually distinguished as system-managed (e.g., a `[system]` tag or muted styling) so users understand they are auto-generated and should not be manually edited.
 
 ---
 
@@ -380,40 +367,40 @@ If a parent agent is stopped or deleted, its progeny agents retain their own tok
 ### Phase 1: Data Model and Storage
 
 1. Add `AllowProgeny` field to `SecretMeta`, `SetSecretInput`, `Secret`, and `EnvVar` models.
-2. Add `allow_progeny` column to secrets and env_vars tables (Ent schema migration).
+2. Add `allow_progeny` column to secrets table (Ent schema migration).
 3. Update secret backend `Set()` to persist the flag.
 4. Update secret backend `List()` and `GetMeta()` to return the flag.
-5. Update API handlers for `PUT /api/v1/secrets/{key}` and `PUT /api/v1/env/{key}` to accept `allowProgeny`.
-6. Update CLI `secret set` and `env set` commands to accept `--allow-progeny` flag.
+5. Add validation: reject `allowProgeny: true` on non-user-scoped secrets.
+6. Update API handler for `PUT /api/v1/secrets/{key}` to accept `allowProgeny`.
+7. Update CLI `secret set` command to accept `--allow-progeny` flag.
 
 ### Phase 2: Ancestry in Token Claims
 
-7. Add `Ancestry` field to `AgentTokenClaims`.
-8. Update `GenerateAgentToken` call sites in dispatcher to include agent ancestry.
-9. Update `AgentIdentity` interface to expose `Ancestry()` and `OriginUserID()`.
-10. Update agent auth middleware to populate ancestry from validated token claims.
+8. Add `Ancestry` field to `AgentTokenClaims`.
+9. Update `GenerateAgentToken` call sites in dispatcher to include agent ancestry.
+10. Update `AgentIdentity` interface to expose `Ancestry()` and `OriginUserID()`.
+11. Update agent auth middleware to populate ancestry from validated token claims.
 
 ### Phase 3: Policy Integration
 
-11. Implement implicit policy creation/deletion when `allowProgeny` is toggled on a secret.
-12. Label implicit policies with `scion.dev/managed-by: progeny-secret-access` for identification.
-13. Ensure policy cleanup on secret deletion.
-14. Add `DelegatedFrom` condition matching against agent ancestry in policy evaluation (verify existing support is sufficient).
+12. Implement implicit policy creation/deletion when `allowProgeny` is toggled on a secret.
+13. Label implicit policies with `scion.dev/managed-by: progeny-secret-access` for identification.
+14. Ensure policy cleanup on secret deletion.
+15. Add `DelegatedFrom` condition matching against agent ancestry in policy evaluation (verify existing support is sufficient).
 
 ### Phase 4: Secret Resolution
 
-15. Add `ResolveOpts` parameter to `SecretBackend.Resolve()`.
-16. Update dispatch flow to pass agent ancestry into `Resolve()` when the creating principal is an agent.
-17. Implement progeny secret query: `WHERE allowProgeny=true AND createdBy IN ancestry`.
-18. Verify via policy engine before including each progeny secret.
-19. Apply same logic to env var resolution.
+16. Add `ResolveOpts` parameter to `SecretBackend.Resolve()`.
+17. Update dispatch flow to pass agent ancestry into `Resolve()` when the creating principal is an agent.
+18. Implement progeny secret query: `WHERE scope=user AND allowProgeny=true AND createdBy IN ancestry`.
+19. Verify via policy engine before including each progeny secret.
 
 ### Phase 5: UX and Testing
 
-20. Add progeny column to CLI `secret list` and `env list` output.
-21. Add toggle to web UI secret/env var forms.
-22. Integration tests: user creates secret with `allowProgeny`, agent creates sub-agent, verify sub-agent receives the secret.
-23. Negative tests: verify progeny access denied when flag is false, when ancestry doesn't match, when deny policy exists.
+20. Add progeny column to CLI `secret list` output.
+21. Add toggle to web UI secret creation/edit forms.
+22. Integration tests: user creates user-scoped secret with `allowProgeny`, agent creates sub-agent, verify sub-agent receives the secret.
+23. Negative tests: verify progeny access denied when flag is false, when ancestry doesn't match, when deny policy exists, when `allowProgeny` is set on non-user scope.
 
 ---
 
@@ -424,19 +411,16 @@ If a parent agent is stopped or deleted, its progeny agents retain their own tok
 | `pkg/secret/secret.go` | Add `AllowProgeny` to `SecretMeta` and `SetSecretInput` |
 | `pkg/secret/localbackend.go` | Persist and query `AllowProgeny` |
 | `pkg/secret/gcpbackend.go` | Persist `AllowProgeny` in metadata labels |
-| `pkg/store/models.go` | Add `AllowProgeny` to `Secret` and `EnvVar` models |
+| `pkg/store/models.go` | Add `AllowProgeny` to `Secret` model |
 | `pkg/ent/schema/secret.go` | Add `allow_progeny` field |
-| `pkg/ent/schema/envvar.go` | Add `allow_progeny` field (if Ent-managed) |
 | `pkg/hub/agenttoken.go` | Add `Ancestry` to `AgentTokenClaims`; add `OriginUserID()` |
-| `pkg/hub/handlers.go` | Accept `allowProgeny` in secret/env PUT handlers; policy lifecycle on toggle |
+| `pkg/hub/handlers.go` | Accept `allowProgeny` in secret PUT handler; validate user-scope only; policy lifecycle on toggle |
 | `pkg/hub/httpdispatcher.go` | Pass ancestry to `GenerateAgentToken`; pass ancestry to `Resolve()` |
 | `pkg/hub/authz.go` | Verify `DelegatedFrom` works with ancestry claims (may need no changes) |
 | `pkg/api/types.go` | Add `AllowProgeny` to API request/response types |
 | `pkg/hubclient/secrets.go` | Add `AllowProgeny` to client SDK types |
-| `pkg/hubclient/env.go` | Add `AllowProgeny` to client SDK types |
 | `cmd/hub_secret.go` | Add `--allow-progeny` flag to `secret set` and `secret update` |
-| `cmd/hub_env.go` | Add `--allow-progeny` flag to `env set` |
-| `web/src/client/...` | Progeny toggle on secret/env forms; badge in list views |
+| `web/src/client/...` | Progeny toggle on secret forms; badge in secret list view |
 
 ---
 
@@ -466,8 +450,26 @@ If a parent agent is stopped or deleted, its progeny agents retain their own tok
 
 **Rationale**: The `allowProgeny` flag applies to all descendants, regardless of depth. This matches the simplest mental model ("my agents and their agents can use this"). Depth limits add complexity and are unlikely to be needed initially. They can be added later as an optional field on the policy condition if demand arises.
 
-### 8.5 Grove-Scoped Secrets and Progeny
+### 8.5 User-Scope Only
 
-**Decision**: `allowProgeny` applies to grove-scoped secrets as well, not just user-scoped.
+**Decision**: `allowProgeny` is restricted to user-scoped secrets. It is rejected on grove-scoped and broker-scoped secrets.
 
-**Rationale**: A grove-scoped secret with `allowProgeny` means "any agent in this grove whose ancestry includes the secret's creator can access this." This is useful for team leads who set grove secrets and want their agents' sub-agents to inherit them. The grove boundary provides the outer security perimeter; `allowProgeny` + `createdBy` provides the inner control.
+**Rationale**: Grove-scoped and broker-scoped secrets are already available to all agents dispatched within that grove or on that broker — including progeny. The `allowProgeny` flag only solves a gap in user-scoped secrets, where progeny agents don't inherit the creating user's scope. Adding the flag to grove/broker scopes would be redundant and confusing.
+
+### 8.6 Ownership is Immutable
+
+**Decision**: The `createdBy` field is immutable. No rebinding on ownership transfer.
+
+**Rationale**: `createdBy` is a historical fact, like ancestry. If the original creator is deactivated, the progeny policy becomes inert — no new agents will match. The admin can toggle `allowProgeny` off and the new owner can re-create the secret. This avoids silent access changes when ownership transfers.
+
+### 8.7 Dispatch-Time Evaluation Only
+
+**Decision**: Progeny access is evaluated at dispatch time. No runtime revocation of already-injected secrets.
+
+**Rationale**: Consistent with all existing secret behavior — secrets are injected into the container at launch and are not revocable mid-run. Toggling `allowProgeny: false` takes effect on the next dispatch, not on running containers.
+
+### 8.8 System-Managed Policy Display
+
+**Decision**: Materialized progeny policies are shown in policy listings with a visual indicator (e.g., `[system]` tag), not hidden.
+
+**Rationale**: Hiding system policies reduces transparency. Showing them with a distinct indicator lets users understand what policies exist while signaling they shouldn't be manually edited. This aligns with the broader pattern of displaying inherited or inferred policies distinctly from user-authored ones.
