@@ -69,6 +69,14 @@ source "${HUB_ENV}"
 source "${CHAT_ENV}"
 set +a
 
+# Resolve the hub endpoint — prefer SCION_HUB_ENDPOINT, fall back to
+# SCION_SERVER_BASE_URL which is set by the starter-hub provisioning.
+SCION_HUB_ENDPOINT="${SCION_HUB_ENDPOINT:-${SCION_SERVER_BASE_URL:-}}"
+if [[ -z "${SCION_HUB_ENDPOINT}" ]]; then
+    echo "ERROR: neither SCION_HUB_ENDPOINT nor SCION_SERVER_BASE_URL is set in ${HUB_ENV}" >&2
+    exit 1
+fi
+
 # Derive the external URL from the hub endpoint.
 EXTERNAL_URL="${SCION_HUB_ENDPOINT}/chat/events"
 
