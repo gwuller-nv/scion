@@ -398,9 +398,9 @@ type rawThread struct {
 }
 
 type rawAnnotation struct {
-	Type       string `json:"type"`
-	StartIndex int    `json:"startIndex"`
-	Length     int    `json:"length"`
+	Type       string  `json:"type"`
+	StartIndex float64 `json:"startIndex"`
+	Length     float64 `json:"length"`
 }
 
 type rawUser struct {
