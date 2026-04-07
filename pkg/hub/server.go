@@ -728,7 +728,18 @@ func (s *Server) ensureSigningKey(ctx context.Context, keyName string, existingK
 		sv, err := s.secretBackend.Get(ctx, keyName, store.ScopeHub, hubID)
 		if err == nil {
 			slog.Info("Loaded existing signing key from secret backend", "key", keyName)
-			return base64.StdEncoding.DecodeString(sv.Value)
+			key, decErr := base64.StdEncoding.DecodeString(sv.Value)
+			if decErr != nil {
+				return nil, fmt.Errorf("failed to decode signing key %s from secret backend: %w", keyName, decErr)
+			}
+			// Backfill the SQLite record as a local backup so the key survives
+			// even if the secret backend becomes unavailable. This also covers
+			// the case where GCPBackend.Get recovered the key directly from
+			// GCP SM without a pre-existing SQLite metadata record.
+			if persistErr := s.persistSigningKey(ctx, keyName, sv.Value, hubID); persistErr != nil {
+				slog.Warn("Failed to persist signing key backup to store after loading from backend", "key", keyName, "error", persistErr)
+			}
+			return key, nil
 		}
 		if err != store.ErrNotFound {
 			slog.Warn("Failed to load signing key from secret backend, trying store", "key", keyName, "error", err)

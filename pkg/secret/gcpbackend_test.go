@@ -150,6 +150,69 @@ func createTestGCPBackend(t *testing.T) (*GCPBackend, *mockSMClient) {
 	return backend, mock
 }
 
+func TestGCPBackend_GetRecoverFromGCPSM_NoDBRecord(t *testing.T) {
+	// Simulate a database reset: secret exists in GCP SM but not in SQLite.
+	// GCPBackend.Get should fall back to GCP SM by computed name.
+	ctx := context.Background()
+
+	// Create first backend, store a secret via Set (populates both GCP SM and DB)
+	s1, err := sqlite.New(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create test store: %v", err)
+	}
+	if err := s1.Migrate(ctx); err != nil {
+		t.Fatalf("failed to migrate test store: %v", err)
+	}
+	mock := newMockSMClient()
+	backend1 := NewGCPBackendWithClient(s1, mock, "test-project", "hub-1")
+
+	input := &SetSecretInput{
+		Name:       "user_signing_key",
+		Value:      "c2VjcmV0LWtleS12YWx1ZQ==",
+		SecretType: store.SecretTypeInternal,
+		Scope:      store.ScopeHub,
+		ScopeID:    "hub-1",
+	}
+	_, _, err = backend1.Set(ctx, input)
+	if err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+
+	// Create a second backend with a FRESH database (simulating DB reset)
+	// but sharing the same mock GCP SM client (secrets still exist there)
+	s2, err := sqlite.New(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create test store 2: %v", err)
+	}
+	if err := s2.Migrate(ctx); err != nil {
+		t.Fatalf("failed to migrate test store 2: %v", err)
+	}
+	backend2 := NewGCPBackendWithClient(s2, mock, "test-project", "hub-1")
+
+	// Get should succeed by falling back to GCP SM by computed name
+	sv, err := backend2.Get(ctx, "user_signing_key", store.ScopeHub, "hub-1")
+	if err != nil {
+		t.Fatalf("Get with no DB record should recover from GCP SM, got: %v", err)
+	}
+	if sv.Value != "c2VjcmV0LWtleS12YWx1ZQ==" {
+		t.Errorf("expected value %q, got %q", "c2VjcmV0LWtleS12YWx1ZQ==", sv.Value)
+	}
+	if sv.Name != "user_signing_key" {
+		t.Errorf("expected name %q, got %q", "user_signing_key", sv.Name)
+	}
+}
+
+func TestGCPBackend_GetNotFoundAnywhere(t *testing.T) {
+	// When a secret exists in neither DB nor GCP SM, Get should return ErrNotFound.
+	backend, _ := createTestGCPBackend(t)
+	ctx := context.Background()
+
+	_, err := backend.Get(ctx, "nonexistent", store.ScopeHub, "hub-1")
+	if err != store.ErrNotFound {
+		t.Errorf("expected ErrNotFound, got: %v", err)
+	}
+}
+
 func TestGCPBackend_SetAndGet(t *testing.T) {
 	backend, mock := createTestGCPBackend(t)
 	ctx := context.Background()

@@ -19,6 +19,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
@@ -74,24 +75,50 @@ func (b *GCPBackend) HubID() string {
 func (b *GCPBackend) Get(ctx context.Context, name, scope, scopeID string) (*SecretWithValue, error) {
 	// Get metadata from DB
 	s, err := b.store.GetSecret(ctx, name, scope, scopeID)
-	if err != nil {
+	if err != nil && err != store.ErrNotFound {
 		return nil, err
 	}
 
 	// Prefer the stored SecretRef for GCP SM lookup (handles secrets created under
 	// a previous naming scheme). Fall back to computing the name if no ref is stored.
+	// If no DB record exists at all, try GCP SM directly by computed name — this
+	// handles database resets where the secret still exists in GCP SM.
 	var value string
-	if smPath, ok := extractGCPSMPath(s.SecretRef); ok {
-		value, err = b.accessLatestVersionByPath(ctx, smPath)
+	if s != nil {
+		if smPath, ok := extractGCPSMPath(s.SecretRef); ok {
+			value, err = b.accessLatestVersionByPath(ctx, smPath)
+		} else {
+			smName := b.gcpSecretName(name, scope, scopeID)
+			value, err = b.accessLatestVersion(ctx, smName)
+		}
 	} else {
+		// No DB record; try GCP SM directly by computed name to handle
+		// database resets where the secret still exists in GCP SM.
 		smName := b.gcpSecretName(name, scope, scopeID)
 		value, err = b.accessLatestVersion(ctx, smName)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return nil, store.ErrNotFound
+			}
+		} else {
+			slog.Info("Recovered secret from GCP SM without DB record", "name", name, "scope", scope)
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to access secret value from GCP SM: %w", err)
 	}
 
-	meta := fromStoreSecretMeta(s)
+	var meta *SecretMeta
+	if s != nil {
+		meta = fromStoreSecretMeta(s)
+	} else {
+		meta = &SecretMeta{
+			Name:       name,
+			Scope:      scope,
+			ScopeID:    scopeID,
+			SecretType: store.SecretTypeInternal,
+		}
+	}
 	return &SecretWithValue{
 		SecretMeta: *meta,
 		Value:      value,
