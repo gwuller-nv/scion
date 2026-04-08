@@ -555,11 +555,8 @@ func TestParseTokenExpiry(t *testing.T) {
 
 func TestClient_RefreshToken(t *testing.T) {
 	t.Run("successful refresh", func(t *testing.T) {
-		// Use temp HOME to isolate token file writes
-		tmpHome := t.TempDir()
-		origHome := os.Getenv("HOME")
-		os.Setenv("HOME", tmpHome)
-		defer os.Setenv("HOME", origHome)
+		cleanup := SetTokenHome(t.TempDir())
+		defer cleanup()
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodPost, r.Method)
@@ -792,10 +789,8 @@ func TestOperatingMode_Defaults(t *testing.T) {
 }
 
 func TestTokenFile_WriteAndRead(t *testing.T) {
-	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	cleanup := SetTokenHome(t.TempDir())
+	defer cleanup()
 
 	t.Run("read returns empty when no file", func(t *testing.T) {
 		token := ReadTokenFile()
@@ -820,19 +815,18 @@ func TestTokenFile_WriteAndRead(t *testing.T) {
 }
 
 func TestNewClient_UsesTokenFile(t *testing.T) {
-	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
+	cleanup := SetTokenHome(t.TempDir())
+	defer cleanup()
+
 	origEndpoint := os.Getenv(EnvHubEndpoint)
 	origToken := os.Getenv(EnvHubToken)
 	origAgentID := os.Getenv(EnvAgentID)
 	defer func() {
-		os.Setenv("HOME", origHome)
 		os.Setenv(EnvHubEndpoint, origEndpoint)
 		os.Setenv(EnvHubToken, origToken)
 		os.Setenv(EnvAgentID, origAgentID)
 	}()
 
-	os.Setenv("HOME", tmpHome)
 	os.Setenv(EnvHubEndpoint, "http://hub.example.com")
 	os.Setenv(EnvHubToken, "original-env-token")
 	os.Setenv(EnvAgentID, "agent-123")
@@ -855,10 +849,8 @@ func TestNewClient_UsesTokenFile(t *testing.T) {
 }
 
 func TestClient_RefreshToken_ConcurrentAccess(t *testing.T) {
-	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	cleanup := SetTokenHome(t.TempDir())
+	defer cleanup()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/agents/agent-123/token/refresh" {

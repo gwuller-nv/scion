@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -813,14 +814,40 @@ const DefaultHeartbeatInterval = 30 * time.Second
 // DefaultHeartbeatTimeout is the default timeout for heartbeat requests.
 const DefaultHeartbeatTimeout = 10 * time.Second
 
-// TokenFilePath returns the path to the canonical token file.
-// It uses $HOME/.scion/<TokenFile>.
-func TokenFilePath() string {
+// tokenHomeResolver returns the home directory to use for the token file.
+// Override in tests via SetTokenHome to use a temp directory.
+var tokenHomeResolver = resolveTokenHome
+
+// resolveTokenHome returns the home directory to use for the token file.
+// Inside agent containers, sciontool init runs as root (HOME=/root) while
+// child processes run as the scion user (HOME=/home/scion). Both must
+// resolve to the same token file path — the scion user's home.
+func resolveTokenHome() string {
+	// Prefer the scion user's home when it exists (inside containers).
+	if u, err := user.Lookup("scion"); err == nil && u.HomeDir != "" {
+		return u.HomeDir
+	}
 	home := os.Getenv("HOME")
 	if home == "" {
 		home = "/home/scion"
 	}
-	return filepath.Join(home, ".scion", TokenFile)
+	return home
+}
+
+// SetTokenHome overrides the token home directory for testing.
+// Returns a cleanup function that restores the original resolver.
+func SetTokenHome(dir string) func() {
+	orig := tokenHomeResolver
+	tokenHomeResolver = func() string { return dir }
+	return func() { tokenHomeResolver = orig }
+}
+
+// TokenFilePath returns the path to the canonical token file.
+// In agent containers it always resolves to the scion user's home
+// directory so that root (sciontool init) and scion (child processes)
+// agree on the same path.
+func TokenFilePath() string {
+	return filepath.Join(tokenHomeResolver(), ".scion", TokenFile)
 }
 
 // WriteTokenFile writes the agent token to the canonical token file.
