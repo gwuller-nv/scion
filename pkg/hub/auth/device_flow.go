@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GoogleCloudPlatform/scion/pkg/apiclient"
 	"github.com/GoogleCloudPlatform/scion/pkg/hubclient"
 )
 
@@ -31,17 +32,28 @@ var errDeviceFlowProviderRequired = errors.New("device flow provider is required
 // DeviceFlowAuth handles the OAuth 2.0 Device Authorization Grant flow
 // for headless environments where a browser cannot be opened directly.
 type DeviceFlowAuth struct {
-	client   hubclient.AuthService
-	output   io.Writer
-	provider string
+	client           hubclient.AuthService
+	output           io.Writer
+	provider         string
+	providerExplicit bool
 }
 
 // NewDeviceFlowAuth creates a new DeviceFlowAuth.
-func NewDeviceFlowAuth(client hubclient.AuthService, provider string) *DeviceFlowAuth {
+func NewDeviceFlowAuth(client hubclient.AuthService, provider ...string) *DeviceFlowAuth {
+	if len(provider) > 1 {
+		panic("NewDeviceFlowAuth accepts at most one provider")
+	}
+	selectedProvider := ""
+	providerExplicit := false
+	if len(provider) > 0 {
+		selectedProvider = strings.TrimSpace(provider[0])
+		providerExplicit = true
+	}
 	return &DeviceFlowAuth{
-		client:   client,
-		output:   os.Stdout,
-		provider: provider,
+		client:           client,
+		output:           os.Stdout,
+		provider:         selectedProvider,
+		providerExplicit: providerExplicit,
 	}
 }
 
@@ -51,17 +63,15 @@ func NewDeviceFlowAuth(client hubclient.AuthService, provider string) *DeviceFlo
 // 3. Polls for authorization completion
 // 4. Returns the token response on success
 func (d *DeviceFlowAuth) Authenticate(ctx context.Context) (*hubclient.CLITokenResponse, error) {
-	if strings.TrimSpace(d.provider) == "" {
+	if d.providerExplicit && d.provider == "" {
 		return nil, errDeviceFlowProviderRequired
 	}
 
-	// Request device code
-	codeResp, err := d.client.RequestDeviceCode(ctx, d.provider)
+	codeResp, provider, err := d.requestDeviceCode(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to request device code: %w", err)
 	}
 
-	// Display instructions
 	fmt.Fprintf(d.output, "\nTo authenticate, visit:\n\n  %s\n\n", codeResp.VerificationURL)
 	fmt.Fprintf(d.output, "And enter the code: %s\n\n", codeResp.UserCode)
 	if codeResp.VerificationURLComplete != "" {
@@ -69,7 +79,6 @@ func (d *DeviceFlowAuth) Authenticate(ctx context.Context) (*hubclient.CLITokenR
 	}
 	fmt.Fprintf(d.output, "Waiting for authorization...\n")
 
-	// Poll for token
 	interval := time.Duration(codeResp.Interval) * time.Second
 	if interval == 0 {
 		interval = 5 * time.Second
@@ -88,7 +97,7 @@ func (d *DeviceFlowAuth) Authenticate(ctx context.Context) (*hubclient.CLITokenR
 			return nil, fmt.Errorf("device authorization expired")
 		}
 
-		pollResp, err := d.client.PollDeviceToken(ctx, codeResp.DeviceCode, d.provider)
+		pollResp, err := d.client.PollDeviceToken(ctx, codeResp.DeviceCode, provider)
 		if err != nil {
 			return nil, fmt.Errorf("failed to poll device token: %w", err)
 		}
@@ -102,7 +111,6 @@ func (d *DeviceFlowAuth) Authenticate(ctx context.Context) (*hubclient.CLITokenR
 		case "expired_token":
 			return nil, fmt.Errorf("device authorization expired")
 		case "":
-			// Success — no status means we got tokens
 			return &hubclient.CLITokenResponse{
 				AccessToken:  pollResp.AccessToken,
 				RefreshToken: pollResp.RefreshToken,
@@ -113,4 +121,35 @@ func (d *DeviceFlowAuth) Authenticate(ctx context.Context) (*hubclient.CLITokenR
 			return nil, fmt.Errorf("unexpected device token status: %s", pollResp.Status)
 		}
 	}
+}
+
+func (d *DeviceFlowAuth) requestDeviceCode(ctx context.Context) (*hubclient.DeviceCodeResponse, string, error) {
+	providers := hubclient.OAuthProviderOrder()
+	if d.providerExplicit {
+		providers = []string{d.provider}
+	}
+
+	var lastErr error
+	for _, provider := range providers {
+		codeResp, err := d.client.RequestDeviceCode(ctx, provider)
+		if err == nil {
+			return codeResp, provider, nil
+		}
+		if !isProviderNotConfiguredError(err) {
+			return nil, "", err
+		}
+		lastErr = err
+	}
+
+	return nil, "", lastErr
+}
+
+func isProviderNotConfiguredError(err error) bool {
+	var apiErr *apiclient.APIError
+	// Fallback is intentionally keyed off the current server-side validation
+	// message until the API exposes a dedicated error code for this condition.
+	// Match a shorter substring to reduce coupling to exact wording.
+	return errors.As(err, &apiErr) &&
+		apiErr.Code == apiclient.ErrCodeValidationError &&
+		strings.Contains(strings.ToLower(apiErr.Message), "provider not configured")
 }
