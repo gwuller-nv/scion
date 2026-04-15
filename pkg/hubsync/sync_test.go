@@ -112,6 +112,72 @@ hub:
 	}
 }
 
+func TestEnsureHubReady_EndpointOverrideBeatsSettings(t *testing.T) {
+	groveID := "test-override-grove-id"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/healthz":
+			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		case r.URL.Path == "/api/v1/groves/"+groveID:
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":   groveID,
+				"name": "Override",
+			})
+		case strings.Contains(r.URL.Path, "/agents"):
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"agents":     []interface{}{},
+				"serverTime": time.Now().UTC().Format(time.RFC3339Nano),
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	tmpHome := t.TempDir()
+	globalDir := filepath.Join(tmpHome, ".scion")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatalf("Failed to create global dir: %v", err)
+	}
+
+	settingsContent := fmt.Sprintf(`grove_id: %s
+hub:
+  enabled: true
+  endpoint: http://localhost:8080
+`, groveID)
+	if err := os.WriteFile(filepath.Join(globalDir, "settings.yaml"), []byte(settingsContent), 0644); err != nil {
+		t.Fatalf("Failed to write settings: %v", err)
+	}
+
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("SCION_DEV_TOKEN", "test-dev-token")
+	t.Setenv("SCION_AUTH_TOKEN", "")
+	t.Setenv("SCION_HUB_ENDPOINT", "")
+
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpHome); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+	defer os.Chdir(origDir)
+
+	hubCtx, err := EnsureHubReady("", EnsureHubReadyOptions{
+		AutoConfirm:      true,
+		SkipSync:         true,
+		EndpointOverride: server.URL,
+	})
+	if err != nil {
+		t.Fatalf("EnsureHubReady returned error: %v", err)
+	}
+	if hubCtx == nil {
+		t.Fatal("EnsureHubReady returned nil; expected hub context when override is set")
+	}
+	if hubCtx.Endpoint != server.URL {
+		t.Fatalf("Endpoint = %q, want %q", hubCtx.Endpoint, server.URL)
+	}
+}
+
 func TestEnsureHubReady_GlobalFallbackWithHubDisabled(t *testing.T) {
 	// When grovePath="" and the resolution falls back to global with hub NOT
 	// enabled, EnsureHubReady should return (nil, nil) - same behavior as before.

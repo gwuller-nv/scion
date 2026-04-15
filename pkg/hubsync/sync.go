@@ -144,6 +144,9 @@ type EnsureHubReadyOptions struct {
 	AutoConfirm bool
 	// NoHub disables Hub integration for this invocation.
 	NoHub bool
+	// EndpointOverride is the explicit Hub endpoint supplied by the caller.
+	// It takes precedence over grove/global settings for this invocation.
+	EndpointOverride string
 	// SkipSync skips agent synchronization check.
 	SkipSync bool
 	// TargetAgent is the agent being operated on. If set, this agent is excluded
@@ -227,7 +230,10 @@ func EnsureHubReady(grovePath string, opts EnsureHubReadyOptions) (*HubContext, 
 	}
 
 	// Hub is enabled - from here on, any failure is an error (no silent fallback)
-	endpoint := getEndpoint(settings)
+	endpoint := opts.EndpointOverride
+	if endpoint == "" {
+		endpoint = getEndpoint(settings)
+	}
 	// In hub context, settings loading may not pick up the env var (e.g. if the
 	// grove path resolves to a synthetic or tmpfs directory without a settings file
 	// and koanf doesn't populate the pointer struct). Fall back to the env var.

@@ -106,7 +106,10 @@ func resolveHubGroveRef(ref string, opts EnsureHubReadyOptions) (*HubContext, er
 			"Enable with: scion config set hub.enabled true")
 	}
 
-	endpoint := getEndpoint(settings)
+	endpoint := opts.EndpointOverride
+	if endpoint == "" {
+		endpoint = getEndpoint(settings)
+	}
 	if endpoint == "" {
 		return nil, fmt.Errorf("hub is enabled but no endpoint configured\n\nConfigure via: scion config set hub.endpoint <url>")
 	}
