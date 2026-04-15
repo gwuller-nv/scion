@@ -363,13 +363,15 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 		if opts.BrokerMode {
 			harness.OverlayFileSecrets(&auth, opts.ResolvedSecrets)
 		}
-		util.Debugf("auth: gathered credentials — selectedType=%q, hasGeminiKey=%t, hasGoogleKey=%t, hasOAuth=%t, hasADC=%t, hasAnthropicKey=%t, cloudProject=%q, gcpMetadataMode=%q, brokerMode=%t",
+		util.Debugf("auth: gathered credentials — selectedType=%q, hasGeminiKey=%t, hasGoogleKey=%t, hasOAuth=%t, hasADC=%t, hasAnthropicKey=%t, hasClaudeOAuthToken=%t, hasClaudeAuthFile=%t, cloudProject=%q, gcpMetadataMode=%q, brokerMode=%t",
 			auth.SelectedType,
 			auth.GeminiAPIKey != "",
 			auth.GoogleAPIKey != "",
 			auth.OAuthCreds != "",
 			auth.GoogleAppCredentials != "",
 			auth.AnthropicAPIKey != "",
+			auth.ClaudeOAuthToken != "",
+			auth.ClaudeAuthFile != "",
 			auth.GoogleCloudProject,
 			auth.GCPMetadataMode,
 			opts.BrokerMode,
@@ -405,6 +407,26 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 		}
 		resolvedAuth = resolved
 		opts.ResolvedSecrets = filterResolvedSecretsForResolvedAuth(opts.ResolvedSecrets, &resolvedForSecretFilter)
+		// The hub pre-merges environment-type secrets into ResolvedEnv before
+		// dispatching to the broker (see pkg/hub/httpdispatcher.go), so auth
+		// env keys copied into opts.Env via start_context's ResolvedEnv merge
+		// would otherwise slip through even after ResolvedSecrets filtering.
+		// Drop auth-candidate env keys that the resolved auth method does not
+		// use, mirroring the ResolvedSecrets filter.
+		if len(opts.Env) > 0 {
+			requiredAuthEnv := make(map[string]struct{}, len(resolvedForSecretFilter.EnvVars))
+			for k := range resolvedForSecretFilter.EnvVars {
+				requiredAuthEnv[k] = struct{}{}
+			}
+			for k := range opts.Env {
+				if !isAuthEnvKey(k) {
+					continue
+				}
+				if _, required := requiredAuthEnv[k]; !required {
+					delete(opts.Env, k)
+				}
+			}
+		}
 
 		// Persist the resolved auth method so it can be reported to the Hub.
 		// For auto-detected auth, opts.HarnessAuth may be empty; capture the
@@ -1064,6 +1086,7 @@ func isAuthEnvKey(key string) bool {
 	case "GEMINI_API_KEY",
 		"GOOGLE_API_KEY",
 		"ANTHROPIC_API_KEY",
+		"CLAUDE_CODE_OAUTH_TOKEN",
 		"OPENAI_API_KEY",
 		"CODEX_API_KEY",
 		"GOOGLE_CLOUD_PROJECT",
@@ -1088,6 +1111,8 @@ func authFileKind(name, target string) string {
 		return "codex-auth"
 	case name == "OPENCODE_AUTH" || strings.HasSuffix(target, "/opencode/auth.json"):
 		return "opencode-auth"
+	case name == "CLAUDE_AUTH" || strings.HasSuffix(target, "/.claude/.credentials.json"):
+		return "claude-auth"
 	default:
 		return ""
 	}
