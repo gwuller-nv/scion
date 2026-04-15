@@ -585,3 +585,34 @@ func toMaintenanceRunResponse(run store.MaintenanceOperationRun) maintenanceRunR
 	}
 	return resp
 }
+
+// handleCheckForUpdates handles POST /api/v1/admin/maintenance/check-updates.
+// It fetches from origin and compares the local HEAD against origin/main.
+func (s *Server) handleCheckForUpdates(w http.ResponseWriter, r *http.Request) {
+	user := GetUserIdentityFromContext(r.Context())
+	if user == nil || user.Role() != "admin" {
+		Forbidden(w)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		MethodNotAllowed(w)
+		return
+	}
+
+	mc := s.config.MaintenanceConfig
+	if mc.RepoPath == "" {
+		writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest,
+			"No repository path configured; set maintenance.repo_path in settings", nil)
+		return
+	}
+
+	result, err := CheckForUpdates(r.Context(), mc.RepoPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, ErrCodeInternalError,
+			"Failed to check for updates: "+err.Error(), nil)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}

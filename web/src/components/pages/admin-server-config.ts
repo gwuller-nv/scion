@@ -207,6 +207,19 @@ interface ReloadResult {
   error?: string;
 }
 
+interface UpdateCommitInfo {
+  hash: string;
+  subject: string;
+}
+
+interface UpdateCheckResult {
+  update_available: boolean;
+  current_commit: string;
+  latest_commit: string;
+  commits_behind: number;
+  new_commits?: UpdateCommitInfo[];
+}
+
 interface GitHubInstallationInfo {
   installation_id: number;
   account_login: string;
@@ -246,6 +259,13 @@ export class ScionPageAdminServerConfig extends LitElement {
   @state() private scionVersion = '';
   @state() private scionCommit = '';
   @state() private scionBuildTime = '';
+
+  // ── Update check state ──
+  @state() private updateCheckLoading = false;
+  @state() private updateCheckError: string | null = null;
+  @state() private updateCheckResult: UpdateCheckResult | null = null;
+  @state() private updateRunning = false;
+  @state() private showUpdateConfirm = false;
 
   // ── Form state (mirrors settings.yaml) ──
 
@@ -497,6 +517,68 @@ export class ScionPageAdminServerConfig extends LitElement {
       padding: 0.125rem 0.375rem;
       border-radius: 0.25rem;
       border: 1px solid var(--scion-border, #e2e8f0);
+    }
+
+    .version-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-left: auto;
+      align-self: flex-start;
+    }
+
+    .update-banner {
+      margin-top: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-radius: 0.375rem;
+      border: 1px solid var(--sl-color-primary-200, #bfdbfe);
+      background: var(--sl-color-primary-50, #eff6ff);
+    }
+
+    .update-banner-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: var(--sl-color-primary-700, #1d4ed8);
+    }
+
+    .update-banner-header sl-icon {
+      font-size: 1rem;
+    }
+
+    .update-commits {
+      margin-top: 0.5rem;
+      max-height: 10rem;
+      overflow-y: auto;
+      font-size: 0.8125rem;
+      font-family: var(--sl-font-mono, monospace);
+      line-height: 1.5;
+      color: var(--scion-text, #1e293b);
+    }
+
+    .update-commits .commit-hash {
+      color: var(--sl-color-primary-600, #2563eb);
+      margin-right: 0.5rem;
+    }
+
+    .update-banner-actions {
+      margin-top: 0.75rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .update-current {
+      margin-top: 0.5rem;
+      font-size: 0.8125rem;
+      color: var(--scion-text-muted, #64748b);
+    }
+
+    .update-error {
+      margin-top: 0.5rem;
+      font-size: 0.8125rem;
+      color: var(--sl-color-danger-700, #b91c1c);
     }
 
     sl-input::part(base),
@@ -1005,6 +1087,7 @@ export class ScionPageAdminServerConfig extends LitElement {
 
   private renderVersionInfo() {
     if (!this.scionVersion && !this.scionCommit) return nothing;
+    const r = this.updateCheckResult;
     return html`
       <div class="section">
         <h3 class="section-title">Scion Server Version</h3>
@@ -1027,8 +1110,60 @@ export class ScionPageAdminServerConfig extends LitElement {
                 <span class="version-value">${this.scionBuildTime}</span>
               </div>`
             : nothing}
+          <div class="version-actions">
+            <sl-button
+              size="small"
+              variant="default"
+              ?loading=${this.updateCheckLoading}
+              @click=${() => this.checkForUpdates()}
+            >
+              <sl-icon slot="prefix" name="arrow-clockwise"></sl-icon>
+              Check for Updates
+            </sl-button>
+          </div>
         </div>
+        ${this.updateCheckError
+          ? html`<div class="update-error">${this.updateCheckError}</div>`
+          : nothing}
+        ${r && r.update_available
+          ? html`
+              <div class="update-banner">
+                <div class="update-banner-header">
+                  <sl-icon name="info-circle"></sl-icon>
+                  Update available &mdash; ${r.commits_behind} new commit${r.commits_behind === 1 ? '' : 's'}
+                </div>
+                ${r.new_commits && r.new_commits.length > 0
+                  ? html`
+                      <div class="update-commits">
+                        ${r.new_commits.map(
+                          (c) => html`
+                            <div>
+                              <span class="commit-hash">${c.hash}</span>${c.subject}
+                            </div>
+                          `,
+                        )}
+                      </div>
+                    `
+                  : nothing}
+                <div class="update-banner-actions">
+                  <sl-button
+                    size="small"
+                    variant="primary"
+                    ?loading=${this.updateRunning}
+                    @click=${() => (this.showUpdateConfirm = true)}
+                  >
+                    <sl-icon slot="prefix" name="download"></sl-icon>
+                    Update Now
+                  </sl-button>
+                </div>
+              </div>
+            `
+          : nothing}
+        ${r && !r.update_available
+          ? html`<div class="update-current">Server is up to date.</div>`
+          : nothing}
       </div>
+      ${this.showUpdateConfirm ? this.renderUpdateConfirmDialog() : nothing}
     `;
   }
 
@@ -2206,6 +2341,95 @@ export class ScionPageAdminServerConfig extends LitElement {
       this.githubAppError = 'Failed to save GitHub App configuration';
     } finally {
       this.githubAppSaving = false;
+    }
+  }
+
+  // ── Update check ──
+
+  private async checkForUpdates(): Promise<void> {
+    this.updateCheckLoading = true;
+    this.updateCheckError = null;
+    this.updateCheckResult = null;
+    try {
+      const res = await apiFetch('/api/v1/admin/maintenance/check-updates', {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        this.updateCheckError = await extractApiError(res, 'Failed to check for updates');
+        return;
+      }
+      this.updateCheckResult = (await res.json()) as UpdateCheckResult;
+    } catch {
+      this.updateCheckError = 'Failed to connect to server';
+    } finally {
+      this.updateCheckLoading = false;
+    }
+  }
+
+  private renderUpdateConfirmDialog() {
+    return html`
+      <sl-dialog
+        label="Update Server"
+        open
+        @sl-request-close=${() => (this.showUpdateConfirm = false)}
+      >
+        <div>
+          <p>
+            This will pull the latest code, rebuild the server, and
+            <strong>restart the service</strong>. You will temporarily lose
+            connectivity.
+          </p>
+          ${this.updateCheckResult
+            ? html`<p>
+                <strong>${this.updateCheckResult.commits_behind}</strong> new
+                commit${this.updateCheckResult.commits_behind === 1 ? '' : 's'}
+                will be applied.
+              </p>`
+            : nothing}
+        </div>
+        <sl-button
+          slot="footer"
+          variant="default"
+          @click=${() => (this.showUpdateConfirm = false)}
+          ?disabled=${this.updateRunning}
+        >Cancel</sl-button>
+        <sl-button
+          slot="footer"
+          variant="warning"
+          ?loading=${this.updateRunning}
+          @click=${() => this.triggerUpdate()}
+        >
+          <sl-icon slot="prefix" name="download"></sl-icon>
+          Update &amp; Restart
+        </sl-button>
+      </sl-dialog>
+    `;
+  }
+
+  private async triggerUpdate(): Promise<void> {
+    this.updateRunning = true;
+    try {
+      const res = await apiFetch(
+        '/api/v1/admin/maintenance/operations/rebuild-server/run',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ params: {} }),
+        },
+      );
+      if (!res.ok) {
+        const errMsg = await extractApiError(res, `HTTP ${res.status}`);
+        this.updateCheckError = errMsg;
+        return;
+      }
+      // Server will restart — the page will lose connectivity.
+      this.showUpdateConfirm = false;
+      this.updateCheckResult = null;
+      this.successMessage = 'Update started. The server will restart shortly.';
+    } catch {
+      this.updateCheckError = 'Failed to trigger update';
+    } finally {
+      this.updateRunning = false;
     }
   }
 }

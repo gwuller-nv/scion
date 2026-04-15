@@ -491,3 +491,47 @@ func TestParseMigrationParams(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckForUpdates_NoRepoPath(t *testing.T) {
+	srv, _ := newTestServerWithStore(t)
+	// No RepoPath configured — should return 400.
+	srv.config.MaintenanceConfig = MaintenanceConfig{}
+
+	admin := NewAuthenticatedUser("u1", "admin@example.com", "Admin", "admin", "cli")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/maintenance/check-updates", nil)
+	req = req.WithContext(contextWithIdentity(req.Context(), admin))
+	rr := httptest.NewRecorder()
+	srv.handleCheckForUpdates(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestCheckForUpdates_WrongMethod(t *testing.T) {
+	srv, _ := newTestServerWithStore(t)
+
+	admin := NewAuthenticatedUser("u1", "admin@example.com", "Admin", "admin", "cli")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/maintenance/check-updates", nil)
+	req = req.WithContext(contextWithIdentity(req.Context(), admin))
+	rr := httptest.NewRecorder()
+	srv.handleCheckForUpdates(rr, req)
+
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestCheckForUpdates_NonAdmin(t *testing.T) {
+	srv, _ := newTestServerWithStore(t)
+
+	viewer := NewAuthenticatedUser("u1", "viewer@example.com", "Viewer", "viewer", "cli")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/maintenance/check-updates", nil)
+	req = req.WithContext(contextWithIdentity(req.Context(), viewer))
+	rr := httptest.NewRecorder()
+	srv.handleCheckForUpdates(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
