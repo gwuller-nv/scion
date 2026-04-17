@@ -541,11 +541,21 @@ type InitMachineOpts struct {
 	// Force overwrites existing template and harness-config files with the
 	// versions embedded in the binary. Use this to refresh after a binary upgrade.
 	Force bool
+
+	// SkipRuntimeCheck seeds the default settings without probing for a local
+	// container runtime. This is used by subprocess-only broker deployments
+	// that still need the embedded global config scaffold.
+	SkipRuntimeCheck bool
 }
 
 // InitMachine performs full global/machine-level setup: creates ~/.scion/,
 // seeds settings, harness-configs, and the default agnostic template.
 func InitMachine(harnesses []api.Harness, opts ...InitMachineOpts) error {
+	var opt InitMachineOpts
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
 	globalDir, err := GetGlobalDir()
 	if err != nil {
 		return err
@@ -558,30 +568,37 @@ func InitMachine(harnesses []api.Harness, opts ...InitMachineOpts) error {
 	// Create global settings file if it doesn't exist
 	settingsPath := GetSettingsPath(globalDir)
 	if settingsPath == "" {
-		// Detect a functioning container runtime before seeding settings
-		detectedRuntime, err := DetectLocalRuntime()
-		if err != nil {
-			return err
-		}
-
-		// Seed default YAML settings with the detected runtime
-		defaultSettings, err := getDefaultSettingsYAMLForRuntime(detectedRuntime)
-		if err != nil {
-			// Fall back to JSON defaults
-			defaultSettings, err = getDefaultSettingsDataForRuntime(detectedRuntime)
+		var defaultSettings []byte
+		var err error
+		if opt.SkipRuntimeCheck {
+			defaultSettings, err = GetDefaultSettingsDataYAML()
 			if err != nil {
-				return fmt.Errorf("failed to read default settings: %w", err)
+				defaultSettings, err = GetDefaultSettingsData()
+				if err != nil {
+					return fmt.Errorf("failed to read default settings: %w", err)
+				}
+			}
+		} else {
+			// Detect a functioning container runtime before seeding settings
+			detectedRuntime, rtErr := DetectLocalRuntime()
+			if rtErr != nil {
+				return rtErr
+			}
+
+			// Seed default YAML settings with the detected runtime
+			defaultSettings, err = getDefaultSettingsYAMLForRuntime(detectedRuntime)
+			if err != nil {
+				// Fall back to JSON defaults
+				defaultSettings, err = getDefaultSettingsDataForRuntime(detectedRuntime)
+				if err != nil {
+					return fmt.Errorf("failed to read default settings: %w", err)
+				}
 			}
 		}
 		newSettingsPath := filepath.Join(globalDir, "settings.yaml")
 		if err := os.WriteFile(newSettingsPath, defaultSettings, 0644); err != nil {
 			return fmt.Errorf("failed to seed global settings.yaml: %w", err)
 		}
-	}
-
-	var opt InitMachineOpts
-	if len(opts) > 0 {
-		opt = opts[0]
 	}
 
 	templatesDir := filepath.Join(globalDir, "templates")

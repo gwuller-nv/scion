@@ -38,6 +38,10 @@ func TestBrokerRestartCmdFlags(t *testing.T) {
 	assert.NotNil(t, portFlag, "--port flag should be registered")
 	assert.Equal(t, "9800", portFlag.DefValue, "default port should be 9800")
 
+	runtimeFlag := brokerRestartCmd.Flags().Lookup("runtime")
+	assert.NotNil(t, runtimeFlag, "--runtime flag should be registered")
+	assert.Equal(t, "", runtimeFlag.DefValue, "default runtime should be empty")
+
 	autoProvideFlag := brokerRestartCmd.Flags().Lookup("auto-provide")
 	assert.NotNil(t, autoProvideFlag, "--auto-provide flag should be registered")
 	assert.Equal(t, "false", autoProvideFlag.DefValue, "default auto-provide should be false")
@@ -45,6 +49,12 @@ func TestBrokerRestartCmdFlags(t *testing.T) {
 	debugFlag := brokerRestartCmd.Flags().Lookup("debug")
 	assert.NotNil(t, debugFlag, "--debug flag should be registered")
 	assert.Equal(t, "false", debugFlag.DefValue, "default debug should be false")
+}
+
+func TestBrokerStartCmdRuntimeFlag(t *testing.T) {
+	runtimeFlag := brokerStartCmd.Flags().Lookup("runtime")
+	assert.NotNil(t, runtimeFlag, "--runtime flag should be registered")
+	assert.Equal(t, "", runtimeFlag.DefValue, "default runtime should be empty")
 }
 
 func TestBrokerRestartCmdMetadata(t *testing.T) {

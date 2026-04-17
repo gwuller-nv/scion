@@ -41,6 +41,7 @@ func resetServerFlags() {
 	hubHost = "0.0.0.0"
 	hubPort = 9810
 	runtimeBrokerPort = 9800
+	runtimeBrokerRuntime = ""
 	webPort = 8080
 	storageBucket = ""
 	storageDir = ""

@@ -234,7 +234,11 @@ Manages the local host as a Runtime Broker.
 
 - `scion broker status`: Show status of the local broker server.
 - `scion broker start`: Start the broker server as a background daemon.
+    - Flags: `--foreground`, `--port`, `--auto-provide`, `--runtime`
+    - Example: `scion broker start --runtime subprocess`
 - `scion broker stop`: Stop the broker daemon.
+- `scion broker restart`: Stop and restart the broker daemon.
+    - Flags: `--port`, `--auto-provide`, `--runtime`
 - `scion broker register`: Register this host as a Runtime Broker with the Hub.
 - `scion broker deregister`: Remove this broker's registration from the Hub.
 - `scion broker provide`: Add this broker as a provider for a grove.
@@ -245,7 +249,8 @@ Manages the local host as a Runtime Broker.
 Manages Scion server components (Hub and Broker).
 
 - `scion server start`: Start one or more server components.
-    - Flags: `--enable-hub`, `--enable-runtime-broker`, `--port`, `--db`, `--dev-auth`.
+    - Flags: `--enable-hub`, `--enable-runtime-broker`, `--port`, `--db`, `--dev-auth`, `--runtime-broker-runtime`.
+    - Example: `scion server start --enable-runtime-broker --runtime-broker-runtime subprocess`
 
 ## Miscellaneous
 
@@ -254,5 +259,4 @@ Manages Scion server components (Hub and Broker).
 Prints the Scion version information.
 
 **Usage:** `scion version`
-
 

@@ -49,11 +49,13 @@ var (
 	// broker start flags
 	brokerStartForeground  bool
 	brokerStartPort        int
+	brokerStartRuntime     string
 	brokerStartAutoProvide bool
 	brokerStartDebug       bool
 
 	// broker restart flags
 	brokerRestartPort        int
+	brokerRestartRuntime     string
 	brokerRestartAutoProvide bool
 	brokerRestartDebug       bool
 
@@ -320,6 +322,7 @@ func init() {
 
 	// Restart flags
 	brokerRestartCmd.Flags().IntVar(&brokerRestartPort, "port", DefaultBrokerPort, "Runtime Broker API port")
+	brokerRestartCmd.Flags().StringVar(&brokerRestartRuntime, "runtime", "", "Runtime type for broker-managed agents (e.g. subprocess)")
 	brokerRestartCmd.Flags().BoolVar(&brokerRestartAutoProvide, "auto-provide", false, "Automatically add as provider for new groves")
 	brokerRestartCmd.Flags().BoolVar(&brokerRestartDebug, "debug", false, "Enable debug logging (verbose output)")
 
@@ -342,6 +345,7 @@ func init() {
 	// Start flags
 	brokerStartCmd.Flags().BoolVar(&brokerStartForeground, "foreground", false, "Run in foreground instead of as daemon")
 	brokerStartCmd.Flags().IntVar(&brokerStartPort, "port", DefaultBrokerPort, "Runtime Broker API port")
+	brokerStartCmd.Flags().StringVar(&brokerStartRuntime, "runtime", "", "Runtime type for broker-managed agents (e.g. subprocess)")
 	brokerStartCmd.Flags().BoolVar(&brokerStartAutoProvide, "auto-provide", false, "Automatically add as provider for new groves")
 	brokerStartCmd.Flags().BoolVar(&brokerStartDebug, "debug", false, "Enable debug logging (verbose output)")
 
@@ -802,6 +806,9 @@ func runBrokerStart(cmd *cobra.Command, args []string) error {
 		if brokerStartPort != DefaultBrokerPort {
 			serverArgs = append(serverArgs, fmt.Sprintf("--runtime-broker-port=%d", brokerStartPort))
 		}
+		if brokerStartRuntime != "" {
+			serverArgs = append(serverArgs, fmt.Sprintf("--runtime-broker-runtime=%s", brokerStartRuntime))
+		}
 		if brokerStartAutoProvide {
 			serverArgs = append(serverArgs, "--auto-provide")
 		}
@@ -841,6 +848,9 @@ func runBrokerStart(cmd *cobra.Command, args []string) error {
 	daemonArgs := []string{"server", "start", "--foreground", "--production", "--enable-runtime-broker"}
 	if brokerStartPort != DefaultBrokerPort {
 		daemonArgs = append(daemonArgs, fmt.Sprintf("--runtime-broker-port=%d", brokerStartPort))
+	}
+	if brokerStartRuntime != "" {
+		daemonArgs = append(daemonArgs, fmt.Sprintf("--runtime-broker-runtime=%s", brokerStartRuntime))
 	}
 	if brokerStartAutoProvide {
 		daemonArgs = append(daemonArgs, "--auto-provide")
@@ -960,6 +970,9 @@ func runBrokerRestart(cmd *cobra.Command, args []string) error {
 	daemonArgs := []string{"server", "start", "--foreground", "--production", "--enable-runtime-broker"}
 	if brokerRestartPort != DefaultBrokerPort {
 		daemonArgs = append(daemonArgs, fmt.Sprintf("--runtime-broker-port=%d", brokerRestartPort))
+	}
+	if brokerRestartRuntime != "" {
+		daemonArgs = append(daemonArgs, fmt.Sprintf("--runtime-broker-runtime=%s", brokerRestartRuntime))
 	}
 	if brokerRestartAutoProvide {
 		daemonArgs = append(daemonArgs, "--auto-provide")

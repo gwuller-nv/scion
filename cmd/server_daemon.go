@@ -103,6 +103,9 @@ func runServerStartOrDaemon(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("runtime-broker-port") {
 		daemonArgs = append(daemonArgs, fmt.Sprintf("--runtime-broker-port=%d", runtimeBrokerPort))
 	}
+	if cmd.Flags().Changed("runtime-broker-runtime") {
+		daemonArgs = append(daemonArgs, fmt.Sprintf("--runtime-broker-runtime=%s", runtimeBrokerRuntime))
+	}
 	if cmd.Flags().Changed("web-port") {
 		daemonArgs = append(daemonArgs, fmt.Sprintf("--web-port=%d", webPort))
 	}

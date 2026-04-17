@@ -45,7 +45,7 @@ func GetRuntime(grovePath string, profileName string) Runtime {
 			util.Debugf("GetRuntime: ResolveRuntime failed: %v", err)
 			// If profile resolution fails, we might be passed a direct runtime type
 			// Fallback to legacy behavior for now if profileName matches a known type
-			if profileName == "docker" || profileName == "podman" || profileName == "kubernetes" || profileName == "k8s" || profileName == "container" || profileName == "remote" || profileName == "local" {
+			if profileName == "docker" || profileName == "podman" || profileName == "kubernetes" || profileName == "k8s" || profileName == "container" || profileName == "remote" || profileName == "local" || profileName == "subprocess" {
 				runtimeType = profileName
 				util.Debugf("GetRuntime: using profileName as runtimeType: %s", runtimeType)
 			} else {
@@ -95,6 +95,8 @@ func GetRuntime(grovePath string, profileName string) Runtime {
 	util.Debugf("GetRuntime: final runtime type: %s", runtimeType)
 
 	switch runtimeType {
+	case "subprocess":
+		return NewSubprocessRuntime()
 	case "container":
 		return NewAppleContainerRuntime()
 	case "docker":

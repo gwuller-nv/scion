@@ -22,17 +22,18 @@ import (
 const GlobalGroveName = "global"
 
 var (
-	serverConfigPath    string
-	hubPort             int
-	hubHost             string
-	enableHub           bool
-	enableRuntimeBroker bool
-	runtimeBrokerPort   int
-	dbURL               string
-	enableDevAuth       bool
-	enableDebug         bool
-	storageBucket       string
-	storageDir          string
+	serverConfigPath     string
+	hubPort              int
+	hubHost              string
+	enableHub            bool
+	enableRuntimeBroker  bool
+	runtimeBrokerPort    int
+	runtimeBrokerRuntime string
+	dbURL                string
+	enableDevAuth        bool
+	enableDebug          bool
+	storageBucket        string
+	storageDir           string
 
 	// Template cache settings for Runtime Broker
 	templateCacheDir string
@@ -240,6 +241,7 @@ func init() {
 	// Runtime Broker API flags
 	serverStartCmd.Flags().BoolVar(&enableRuntimeBroker, "enable-runtime-broker", false, "Enable the Runtime Broker API")
 	serverStartCmd.Flags().IntVar(&runtimeBrokerPort, "runtime-broker-port", 9800, "Runtime Broker API port")
+	serverStartCmd.Flags().StringVar(&runtimeBrokerRuntime, "runtime-broker-runtime", "", "Runtime type for broker-managed agents (e.g. subprocess)")
 
 	// Auth flags
 	serverStartCmd.Flags().BoolVar(&enableDevAuth, "dev-auth", false, "Enable development authentication (auto-generates token)")

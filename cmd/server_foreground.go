@@ -85,7 +85,11 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 	}
 	if _, err := os.Stat(globalDir); os.IsNotExist(err) {
 		log.Println("Initializing global scion directory...")
-		if err := config.InitGlobal(harness.All()); err != nil {
+		initOpts := config.InitMachineOpts{}
+		if runtimeBrokerRuntime == "subprocess" {
+			initOpts.SkipRuntimeCheck = true
+		}
+		if err := config.InitGlobal(harness.All(), initOpts); err != nil {
 			return fmt.Errorf("failed to initialize global config: %w", err)
 		}
 	} else if productionMode {
@@ -982,7 +986,10 @@ func initWebServer(cfg *config.GlobalConfig, hubSrv *hub.Server, devAuthToken st
 
 // startRuntimeBroker initializes and starts the runtime broker server.
 func startRuntimeBroker(ctx context.Context, cmd *cobra.Command, cfg *config.GlobalConfig, hubSrv *hub.Server, webSrv *hub.WebServer, s store.Store, hubEndpoint, devAuthToken string, brokerSettings *config.Settings, globalDir string, requestLogger, messageLogger *slog.Logger, wg *sync.WaitGroup, errCh chan error) error {
-	rt := runtime.GetRuntime("", "")
+	rt := runtime.GetRuntime("", runtimeBrokerRuntime)
+	if errRt, ok := rt.(*runtime.ErrorRuntime); ok {
+		return errRt.Err
+	}
 	log.Printf("Runtime broker using runtime: %s", rt.Name())
 
 	mgr := agent.NewManager(rt)
@@ -1104,6 +1111,7 @@ func startRuntimeBroker(ctx context.Context, cmd *cobra.Command, cfg *config.Glo
 
 		ControlChannelEnabled: hubEndpointForRH != "",
 		HeartbeatEnabled:      hubEndpointForRH != "",
+		ForceRuntime:          runtimeBrokerRuntime,
 
 		InMemoryCredentials:  inMemoryCreds,
 		BrokerAuthEnabled:    true,

@@ -60,8 +60,13 @@ func queryTmuxActiveWindow(ctx context.Context, runtimeCmd, containerID, execUse
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, runtimeCmd, "exec", "--user", execUser, containerID,
-		"tmux", "display-message", "-t", "scion", "-p", "#{window_name}")
+	var cmd *exec.Cmd
+	if runtimeCmd == "subprocess" {
+		cmd = exec.CommandContext(ctx, "tmux", "display-message", "-t", containerID, "-p", "#{window_name}")
+	} else {
+		cmd = exec.CommandContext(ctx, runtimeCmd, "exec", "--user", execUser, containerID,
+			"tmux", "display-message", "-t", "scion", "-p", "#{window_name}")
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		slog.Debug("Failed to query tmux active window", "containerID", containerID, "error", err)
@@ -134,7 +139,9 @@ func waitForTmuxSession(ctx context.Context, runtimeCmd, containerID, namespace,
 			return fmt.Errorf("timed out waiting for tmux session in container '%s' to become ready", containerID)
 		case <-ticker.C:
 			var checkErr error
-			if isK8s && k8sConfig != nil && k8sClientset != nil {
+			if runtimeCmd == "subprocess" {
+				checkErr = exec.CommandContext(ctx, "tmux", "has-session", "-t", containerID).Run()
+			} else if isK8s && k8sConfig != nil && k8sClientset != nil {
 				// The tmux session runs as the scion user (via sciontool init privilege drop),
 				// so we must check as that user — root can't see scion's tmux socket.
 				checkErr = k8sExecCheck(ctx, k8sConfig, k8sClientset, namespace, containerID, []string{"su", "-", execUser, "-c", "tmux has-session -t scion"})
@@ -510,15 +517,19 @@ func (s *LocalPTYSession) startDockerExec() error {
 		return err
 	}
 
-	args := []string{
-		"exec", "-it",
-		"-e", "TERM=xterm-256color",
-		"--user", s.execUser,
-		s.containerID,
-		"tmux", "attach-session", "-t", "scion",
-	}
+	if s.runtimeCmd == "subprocess" {
+		s.cmd = exec.CommandContext(s.ctx, "tmux", "attach-session", "-t", s.containerID)
+	} else {
+		args := []string{
+			"exec", "-it",
+			"-e", "TERM=xterm-256color",
+			"--user", s.execUser,
+			s.containerID,
+			"tmux", "attach-session", "-t", "scion",
+		}
 
-	s.cmd = exec.CommandContext(s.ctx, s.runtimeCmd, args...)
+		s.cmd = exec.CommandContext(s.ctx, s.runtimeCmd, args...)
+	}
 
 	ptmx, err := pty.StartWithSize(s.cmd, &pty.Winsize{
 		Cols: uint16(s.cols),
@@ -897,14 +908,18 @@ func (h *StreamPTYHandler) startDockerExec() error {
 		return err
 	}
 
-	args := []string{
-		"exec", "-it",
-		"--user", h.execUser,
-		h.containerID,
-		"tmux", "attach-session", "-t", "scion",
-	}
+	if runtimeCmd == "subprocess" {
+		h.cmd = exec.CommandContext(h.ctx, "tmux", "attach-session", "-t", h.containerID)
+	} else {
+		args := []string{
+			"exec", "-it",
+			"--user", h.execUser,
+			h.containerID,
+			"tmux", "attach-session", "-t", "scion",
+		}
 
-	h.cmd = exec.CommandContext(h.ctx, runtimeCmd, args...)
+		h.cmd = exec.CommandContext(h.ctx, runtimeCmd, args...)
+	}
 
 	// Start with a real PTY - this provides proper terminal handling
 	ptmx, err := pty.StartWithSize(h.cmd, &pty.Winsize{

@@ -217,4 +217,26 @@ active_profile: apple
 		}
 	})
 
+	t.Run("Override_Subprocess", func(t *testing.T) {
+		tmpHome := t.TempDir()
+		t.Setenv("HOME", tmpHome)
+
+		tmuxDir := t.TempDir()
+		t.Setenv("PATH", tmuxDir)
+		tmuxPath := filepath.Join(tmuxDir, "tmux")
+		bashPath := filepath.Join(tmuxDir, "bash")
+		script := []byte("#!/bin/sh\nexit 0\n")
+		if err := os.WriteFile(tmuxPath, script, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(bashPath, script, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		r := GetRuntime("", "subprocess")
+		if _, ok := r.(*SubprocessRuntime); !ok {
+			t.Errorf("expected *SubprocessRuntime from parameter override, got %T", r)
+		}
+	})
+
 }
